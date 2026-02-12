@@ -1,7 +1,36 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 function Navbar({ user }) {
+  const [pendingCount, setPendingCount] = useState(3);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSummary = async () => {
+      try {
+        const response = await fetch("http://localhost:4000/api/requests/summary");
+        const data = await response.json();
+
+        if (!response.ok || !mounted) {
+          return;
+        }
+
+        setPendingCount(Number(data.pendingTotal) || 0);
+      } catch {
+        // Ignore transient API/network errors for top nav badge.
+      }
+    };
+
+    loadSummary();
+    const intervalId = setInterval(loadSummary, 5000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
   const links = [
     { to: "/", label: "Dashboard", managerOnly: false },
     { to: "/scheduling", label: "Scheduling", managerOnly: true },
@@ -23,7 +52,7 @@ function Navbar({ user }) {
           }
         >
           <span>{link.label}</span>
-          {link.label === "Requests" && <span className="mini-badge">3</span>}
+          {link.label === "Requests" && <span className="mini-badge">{pendingCount}</span>}
         </NavLink>
       ))}
     </nav>

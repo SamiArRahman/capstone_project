@@ -47,7 +47,7 @@ function App() {
               {managerView && <Route path="/scheduling" element={<Scheduling />} />}
 
               <Route path="/employees" element={<Employees />} />
-              <Route path="/requests" element={<Requests />} />
+              <Route path="/requests" element={<Requests user={user} />} />
 
               {managerView && <Route path="/analytics" element={<Analytics />} />}
 
