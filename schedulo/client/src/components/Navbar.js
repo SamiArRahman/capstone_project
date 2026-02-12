@@ -1,18 +1,33 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 function Navbar({ user }) {
+  const links = [
+    { to: "/", label: "Dashboard", managerOnly: false },
+    { to: "/scheduling", label: "Scheduling", managerOnly: true },
+    { to: "/employees", label: "Employees", managerOnly: false },
+    { to: "/requests", label: "Requests", managerOnly: false },
+    { to: "/analytics", label: "Analytics", managerOnly: true }
+  ];
+
+  const visibleLinks = links.filter(link => !link.managerOnly || user.role === "manager");
+
   return (
-    <nav>
-      <strong>Logged in as: {user.role}</strong> | 
-      <a href="/">Dashboard</a> | 
-      {user.role === "manager" && <a href="/scheduling">Scheduling</a>} | 
-      <a href="/employees">Employees</a> | 
-      <a href="/requests">Requests</a> | 
-      {user.role === "manager" && <a href="/analytics">Analytics</a>}
+    <nav className="tab-nav">
+      {visibleLinks.map(link => (
+        <NavLink
+          key={link.to}
+          to={link.to}
+          className={({ isActive }) =>
+            `tab-link${isActive ? " tab-link-active" : ""}${link.label === "Requests" ? " tab-link-with-badge" : ""}`
+          }
+        >
+          <span>{link.label}</span>
+          {link.label === "Requests" && <span className="mini-badge">3</span>}
+        </NavLink>
+      ))}
     </nav>
   );
 }
-
 
 export default Navbar;

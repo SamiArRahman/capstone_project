@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
+import "./App.css";
 import Navbar from "./components/Navbar";
 import Dashboard from "./pages/Dashboard";
 import Scheduling from "./pages/Scheduling";
@@ -10,37 +11,51 @@ import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
 
 function App() {
-
   const [user, setUser] = useState(null);
 
   if (!user) {
     return <Login setUser={setUser} />;
   }
 
+  const managerView = user.role === "manager";
+
   return (
     <BrowserRouter>
+      <div className="app-shell">
+        <header className="top-header">
+          <div>
+            <h1 className="brand-title">Schedulo</h1>
+            <p className="brand-subtitle">Intelligent Workforce Management System</p>
+          </div>
 
-      <Navbar user={user} />
+          <div className="profile-area">
+            <span className="view-pill">{managerView ? "Manager View" : "Employee View"}</span>
+            <span className="profile-name">{user.username}</span>
+            <button className="ghost-button" onClick={() => setUser(null)}>
+              Logout
+            </button>
+          </div>
+        </header>
 
-      <Routes>
+        <main className="main-content">
+          <Navbar user={user} />
 
-        <Route path="/" element={<Dashboard />} />
+          <section className="page-panel">
+            <Routes>
+              <Route path="/" element={<Dashboard user={user} />} />
 
-        {user.role === "manager" && (
-          <Route path="/scheduling" element={<Scheduling />} />
-        )}
+              {managerView && <Route path="/scheduling" element={<Scheduling />} />}
 
-        <Route path="/employees" element={<Employees />} />
-        <Route path="/requests" element={<Requests />} />
+              <Route path="/employees" element={<Employees />} />
+              <Route path="/requests" element={<Requests />} />
 
-        {user.role === "manager" && (
-          <Route path="/analytics" element={<Analytics />} />
-        )}
+              {managerView && <Route path="/analytics" element={<Analytics />} />}
 
-        <Route path="*" element={<Navigate to="/" />} />
-
-      </Routes>
-
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </section>
+        </main>
+      </div>
     </BrowserRouter>
   );
 }

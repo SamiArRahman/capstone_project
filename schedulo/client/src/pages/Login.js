@@ -1,47 +1,86 @@
 import React, { useState } from "react";
 
 function Login({ setUser }) {
-
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const login = () => {
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername || !cleanPassword) {
+      setError("Enter username and password.");
+      return;
+    }
 
     fetch("http://localhost:4000/api/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({
+        username: cleanUsername,
+        password: cleanPassword
+      })
     })
       .then(res => res.json())
       .then(data => {
         if (data.error) {
-          alert(data.error);
+          setError(data.error);
         } else {
+          setError("");
           setUser(data);
         }
       });
   };
 
+  const onKeyDown = event => {
+    if (event.key === "Enter") {
+      login();
+    }
+  };
+
   return (
-    <div>
-      <h2>Login</h2>
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="login-brand-side">
+          <p className="kicker">Schedulo</p>
+          <h1>Workforce Scheduling, Simplified</h1>
+          <p>Sign in to manage shifts, requests, and team coverage in one place.</p>
+        </div>
 
-      <input
-        placeholder="Username"
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-      />
+        <div className="login-form-side">
+          <h2>Login</h2>
 
-      <input
-        placeholder="Password"
-        type="password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-      />
+          <label className="field-label">Username</label>
+          <input
+            className="field-input"
+            placeholder="manager"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
 
-      <button onClick={login}>Login</button>
+          <label className="field-label">Password</label>
+          <input
+            className="field-input"
+            placeholder="1234"
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+
+          {error && <p className="form-message error-text">{error}</p>}
+
+          <button className="primary-button full-width" onClick={login}>
+            Sign In
+          </button>
+
+          <p className="hint-text">Demo accounts: manager/1234 or employee/1234</p>
+        </div>
+      </div>
     </div>
   );
 }
