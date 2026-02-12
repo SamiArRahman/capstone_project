@@ -9,12 +9,21 @@ import Employees from "./pages/Employees";
 import Requests from "./pages/Requests";
 import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
+import Signup from "./pages/Signup";
 
 function App() {
   const [user, setUser] = useState(null);
 
   if (!user) {
-    return <Login setUser={setUser} />;
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/signup" element={<Signup setUser={setUser} />} />
+          <Route path="/login" element={<Login setUser={setUser} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   const managerView = user.role === "manager";
