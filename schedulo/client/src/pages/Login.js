@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 
 function Login({ setUser }) {
   const [username, setUsername] = useState("");
@@ -78,7 +79,9 @@ function Login({ setUser }) {
             Sign In
           </button>
 
-          <p className="hint-text">Demo accounts: manager/1234 or employee/1234</p>
+          <p className="hint-text">
+            Demo: manager/1234 or employee/1234. No account? <Link to="/signup">Sign up</Link>
+          </p>
         </div>
       </div>
     </div>
