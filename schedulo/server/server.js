@@ -129,6 +129,42 @@ app.post("/api/login", (req, res) => {
   });
 });
 
+app.post("/api/register", (req, res) => {
+  const { username, password, name } = req.body;
+  const userUsername = (username && String(username).trim()) || "";
+  const userPassword = (password && String(password)) || "";
+  const userName = (name && String(name).trim()) || userUsername;
+
+  if (userUsername.length < 3) {
+    return res.status(400).json({ error: "Username must be at least 3 characters" });
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(userUsername)) {
+    return res.status(400).json({ error: "Username can only contain letters, numbers, underscore and hyphen" });
+  }
+  if (userPassword.length < 4) {
+    return res.status(400).json({ error: "Password must be at least 4 characters" });
+  }
+  if (users.some(u => u.username.toLowerCase() === userUsername.toLowerCase())) {
+    return res.status(400).json({ error: "Username already taken" });
+  }
+
+  const newUser = {
+    id: getNextId(users),
+    username: userUsername,
+    password: userPassword,
+    role: "employee",
+    name: userName
+  };
+  users.push(newUser);
+
+  res.status(201).json({
+    id: newUser.id,
+    username: newUser.username,
+    role: newUser.role,
+    name: newUser.name
+  });
+});
+
 app.get("/api/requests/pto", (req, res) => {
   const { status } = req.query;
   res.json(applyStatusFilter(ptoRequests, status));
