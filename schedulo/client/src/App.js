@@ -39,7 +39,7 @@ function App() {
 
           <div className="profile-area">
             <span className="view-pill">{managerView ? "Manager View" : "Employee View"}</span>
-            <span className="profile-name">{user.username}</span>
+            <span className="profile-name">{user.name || user.username}</span>
             <button className="ghost-button" onClick={() => setUser(null)}>
               Logout
             </button>
@@ -53,9 +53,9 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard user={user} />} />
 
-              {managerView && <Route path="/scheduling" element={<Scheduling />} />}
+              <Route path="/scheduling" element={<Scheduling user={user} />} />
 
-              <Route path="/employees" element={<Employees />} />
+              <Route path="/employees" element={<Employees user={user} />} />
               <Route path="/requests" element={<Requests user={user} />} />
 
               {managerView && <Route path="/analytics" element={<Analytics />} />}

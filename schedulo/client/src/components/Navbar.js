@@ -33,7 +33,7 @@ function Navbar({ user }) {
 
   const links = [
     { to: "/", label: "Dashboard", managerOnly: false },
-    { to: "/scheduling", label: "Scheduling", managerOnly: true },
+    { to: "/scheduling", label: "Scheduling", managerOnly: false },
     { to: "/employees", label: "Employees", managerOnly: false },
     { to: "/requests", label: "Requests", managerOnly: false },
     { to: "/analytics", label: "Analytics", managerOnly: true }

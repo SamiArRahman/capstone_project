@@ -615,6 +615,30 @@ p {
   font-weight: 700;
 }
 
+.auto-schedule-preview {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.auto-schedule-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 1fr;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  align-items: center;
+}
+
+.auto-schedule-row:last-child {
+  border-bottom: none;
+}
+
 .employees-head-row {
   display: flex;
   justify-content: space-between;
@@ -665,6 +689,25 @@ p {
   top: 14px;
   display: flex;
   gap: 8px;
+}
+
+.employee-edit-form {
+  padding-top: 8px;
+}
+
+.employee-edit-form .field-label {
+  margin-top: 10px;
+}
+
+.employee-edit-form .field-label:first-child {
+  margin-top: 0;
+}
+
+.employee-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .icon-action {
