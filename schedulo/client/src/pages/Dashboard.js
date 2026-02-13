@@ -37,11 +37,17 @@ function formatDayLabel(dateStr) {
   return dayNames[d.getDay()] + ", " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+var DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 function Dashboard({ user }) {
   var [employees, setEmployees] = useState([]);
   var [weekShifts, setWeekShifts] = useState([]);
   var [summary, setSummary] = useState({ pendingPto: 0, pendingSwaps: 0, pendingTotal: 0 });
   var [loading, setLoading] = useState(true);
+  var [availabilityDays, setAvailabilityDays] = useState([]);
+  var [availabilityTimeFrom, setAvailabilityTimeFrom] = useState("09:00");
+  var [availabilityTimeTo, setAvailabilityTimeTo] = useState("17:00");
+  var [availabilitySaveMessage, setAvailabilitySaveMessage] = useState("");
 
   useEffect(function () {
     var weekStart = getWeekMondayStr();
@@ -69,6 +75,49 @@ function Dashboard({ user }) {
 
     return function () { mounted = false; };
   }, []);
+
+  useEffect(function () {
+    if (!user || !user.id || user.role === "manager") return;
+    var mounted = true;
+    fetch(API_BASE + "/availability?userId=" + encodeURIComponent(user.id))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!mounted) return;
+        if (data.days && Array.isArray(data.days)) setAvailabilityDays(data.days);
+        if (data.timeFrom) setAvailabilityTimeFrom(data.timeFrom);
+        if (data.timeTo) setAvailabilityTimeTo(data.timeTo);
+      });
+    return function () { mounted = false; };
+  }, [user && user.id, user && user.role]);
+
+  function toggleAvailabilityDay(day) {
+    setAvailabilityDays(function (prev) {
+      if (prev.indexOf(day) >= 0) return prev.filter(function (d) { return d !== day; });
+      return prev.concat([day]).sort(function (a, b) { return DAYS_OF_WEEK.indexOf(a) - DAYS_OF_WEEK.indexOf(b); });
+    });
+  }
+
+  function saveAvailability() {
+    if (!user || !user.id) return;
+    setAvailabilitySaveMessage("");
+    fetch(API_BASE + "/availability", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        days: availabilityDays,
+        timeFrom: availabilityTimeFrom,
+        timeTo: availabilityTimeTo
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        setAvailabilitySaveMessage("Availability saved.");
+      })
+      .catch(function () {
+        setAvailabilitySaveMessage("Failed to save.");
+      });
+  }
 
   var totalEmployees = employees.length;
   var shiftsThisWeek = weekShifts.length;
@@ -179,29 +228,74 @@ function Dashboard({ user }) {
       </section>
 
       {!isManager && (
-        <section className="info-block">
-          <h3>My shifts this week</h3>
-          {myShifts.length === 0 ? (
-            <p className="form-message">You have no shifts scheduled this week.</p>
-          ) : (
-            <>
-              <p className="form-message" style={{ marginBottom: 8 }}>
-                {myShifts.length} shift(s) – {myHours.toFixed(1)} hours total
-              </p>
-              <div className="coverage-list">
-                {myShifts.map(function (s) {
-                  var dayLabel = formatDayLabel(s.date);
-                  return (
-                    <div key={(s.date || "") + "-" + s.employee + "-" + (s.time || "")} className="coverage-row">
-                      <span>{dayLabel}</span>
-                      <span>{s.time || "—"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </section>
+        <>
+          <section className="info-block">
+            <h3>My shifts this week</h3>
+            {myShifts.length === 0 ? (
+              <p className="form-message">You have no shifts scheduled this week.</p>
+            ) : (
+              <>
+                <p className="form-message" style={{ marginBottom: 8 }}>
+                  {myShifts.length} shift(s) – {myHours.toFixed(1)} hours total
+                </p>
+                <div className="coverage-list">
+                  {myShifts.map(function (s) {
+                    var dayLabel = formatDayLabel(s.date);
+                    return (
+                      <div key={(s.date || "") + "-" + s.employee + "-" + (s.time || "")} className="coverage-row">
+                        <span>{dayLabel}</span>
+                        <span>{s.time || "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </section>
+          <section className="info-block">
+            <h3>My availability</h3>
+            <p className="form-message" style={{ marginBottom: 8 }}>Set which days and times you can work.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {DAYS_OF_WEEK.map(function (day) {
+                var checked = availabilityDays.indexOf(day) >= 0;
+                return (
+                  <label key={day} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={function () { toggleAvailabilityDay(day); }}
+                    />
+                    <span>{day}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
+              <label className="field-label" style={{ marginBottom: 0 }}>From</label>
+              <input
+                type="time"
+                className="field-input"
+                style={{ width: "auto" }}
+                value={availabilityTimeFrom}
+                onChange={function (e) { setAvailabilityTimeFrom(e.target.value); }}
+              />
+              <label className="field-label" style={{ marginBottom: 0 }}>To</label>
+              <input
+                type="time"
+                className="field-input"
+                style={{ width: "auto" }}
+                value={availabilityTimeTo}
+                onChange={function (e) { setAvailabilityTimeTo(e.target.value); }}
+              />
+            </div>
+            <button type="button" className="primary-button" onClick={saveAvailability}>
+              Save availability
+            </button>
+            {availabilitySaveMessage && (
+              <p className="form-message" style={{ marginTop: 8 }}>{availabilitySaveMessage}</p>
+            )}
+          </section>
+        </>
       )}
 
       <section className="info-block">

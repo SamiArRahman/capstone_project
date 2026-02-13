@@ -6,7 +6,7 @@ var WEEK_DAYS = [
   { day: "Wed", date: "Nov 19" },
   { day: "Thu", date: "Nov 20" },
   { day: "Fri", date: "Nov 21" },
-  { day: "Sat", date: "Nov 22", selected: true },
+  { day: "Sat", date: "Nov 22" },
   { day: "Sun", date: "Nov 23" }
 ];
 
@@ -43,7 +43,6 @@ function Scheduling({ user }) {
     if (day.length === 1) day = "0" + day;
     return y + "-" + m + "-" + day;
   })();
-  const [shifts, setShifts] = useState([]);
   const [employee, setEmployee] = useState("");
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
@@ -52,16 +51,6 @@ function Scheduling({ user }) {
   const [endDate, setEndDate] = useState(defaultEnd);
   const [weekShifts, setWeekShifts] = useState([]);
   const [addShiftDate, setAddShiftDate] = useState("");
-
-  function loadShifts() {
-    fetch("http://localhost:4000/api/shifts")
-      .then(function (response) {
-        return response.json();
-      })
-      .then(function (data) {
-        setShifts(data);
-      });
-  }
 
   function loadWeekShifts(weekStart) {
     if (!weekStart) return;
@@ -119,7 +108,6 @@ function Scheduling({ user }) {
         if (data.error) {
           setMessage(data.error);
         } else {
-          loadShifts();
           if (startDate) loadWeekShifts(startDate);
           setEmployee("");
           setTime("");
@@ -130,14 +118,9 @@ function Scheduling({ user }) {
   }
 
   useEffect(function () {
-    loadShifts();
-  }, []);
-
-  useEffect(function () {
     if (startDate) loadWeekShifts(startDate);
   }, [startDate]);
 
-  // build calendar week days from startDate to endDate
   function getCalendarWeekDays() {
     var days = [];
     var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -165,7 +148,6 @@ function Scheduling({ user }) {
   }
   var calendarDays = getCalendarWeekDays();
 
-  // get shifts for one day: from API (weekShifts) or sample shifts when empty
   function getShiftsForDay(dateStr) {
     var result = [];
     for (var i = 0; i < weekShifts.length; i++) {

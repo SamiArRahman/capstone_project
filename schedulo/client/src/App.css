@@ -745,7 +745,8 @@ p {
   gap: 6px;
 }
 
-.employee-skill-chip {
+.employee-skill-chip,
+.skill-pill {
   background: #edf1f7;
   color: #34456a;
   border-radius: 7px;
@@ -754,14 +755,80 @@ p {
   font-weight: 600;
 }
 
+.employee-role-badge {
+  margin-top: 8px;
+}
+
+.role-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.role-pill.role-manager {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.role-pill.role-employee {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.employee-card-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.employee-max-hours {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #526281;
+}
+
+.meta-icon {
+  font-weight: 500;
+}
+
+.employee-availability-toggle {
+  margin-top: 12px;
+}
+
 .availability-link {
-  margin-top: 14px;
+  margin: 0;
   border: none;
   background: transparent;
   color: #2f6df7;
   font-weight: 600;
+  font-size: 13px;
   padding: 0;
   cursor: pointer;
+  text-decoration: none;
+}
+
+.availability-link:hover {
+  text-decoration: underline;
+}
+
+.employee-availability-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.availability-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  color: #263553;
+}
+
+.availability-day-list li {
+  padding: 2px 0;
 }
 
 .requests-switch-bar {

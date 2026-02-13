@@ -11,8 +11,8 @@ app.get("/", function (req, res) {
 });
 
 var users = [
-  { id: 1, username: "manager", password: "1234", role: "manager", name: "Sami" },
-  { id: 2, username: "employee", password: "1234", role: "employee", name: "Krishna" }
+  { id: 1, username: "manager", password: "1234", role: "manager", name: "Sami", email: "sami@gmail.com", maxHoursPerWeek: 40, skills: ["Leadership", "Customer Service"] },
+  { id: 2, username: "employee", password: "1234", role: "employee", name: "Krishna", email: "krishna@gmail.com", maxHoursPerWeek: 40, skills: ["Customer Service", "POS", "Food Handling"] }
 ];
 
 var shifts = [
@@ -54,6 +54,8 @@ var swapRequests = [
     status: "pending"
   }
 ];
+
+var availabilityList = [];
 
 function getNextId(arr) {
   if (arr.length === 0) return 1;
@@ -253,12 +255,18 @@ app.post("/api/register", function (req, res) {
     }
   }
 
+  var email = (req.body.email && String(req.body.email).trim()) || username;
+  var maxHours = req.body.maxHoursPerWeek != null ? Number(req.body.maxHoursPerWeek) : 40;
+  var skillsList = Array.isArray(req.body.skills) ? req.body.skills.filter(function (s) { return String(s).trim(); }) : [];
   var newUser = {
     id: getNextId(users),
     username: username,
     password: password,
     role: "employee",
-    name: name
+    name: name,
+    email: email,
+    maxHoursPerWeek: (maxHours >= 0 && maxHours <= 168) ? maxHours : 40,
+    skills: skillsList
   };
   users.push(newUser);
 
@@ -413,11 +421,15 @@ app.get("/api/requests/summary", function (req, res) {
 app.get("/api/employees", function (req, res) {
   var list = [];
   for (var i = 0; i < users.length; i++) {
+    var u = users[i];
     list.push({
-      id: users[i].id,
-      username: users[i].username,
-      name: users[i].name,
-      role: users[i].role
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      role: u.role,
+      email: u.email || u.username,
+      maxHoursPerWeek: u.maxHoursPerWeek != null ? u.maxHoursPerWeek : 40,
+      skills: Array.isArray(u.skills) ? u.skills : []
     });
   }
   res.json(list);
@@ -428,6 +440,9 @@ app.patch("/api/employees/:id", function (req, res) {
   var name = req.body.name;
   var username = req.body.username;
   var password = req.body.password;
+  var email = req.body.email;
+  var maxHoursPerWeek = req.body.maxHoursPerWeek;
+  var skills = req.body.skills;
 
   var target = null;
   for (var i = 0; i < users.length; i++) {
@@ -443,6 +458,16 @@ app.patch("/api/employees/:id", function (req, res) {
 
   if (name != null && String(name).trim()) {
     target.name = String(name).trim();
+  }
+  if (email != null) {
+    target.email = String(email).trim() || target.username;
+  }
+  if (maxHoursPerWeek != null) {
+    var num = Number(maxHoursPerWeek);
+    target.maxHoursPerWeek = (num >= 0 && num <= 168) ? num : 40;
+  }
+  if (skills != null && Array.isArray(skills)) {
+    target.skills = skills.filter(function (s) { return String(s).trim(); });
   }
   if (username != null) {
     var newUsername = String(username).trim();
@@ -474,7 +499,10 @@ app.patch("/api/employees/:id", function (req, res) {
     id: target.id,
     username: target.username,
     role: target.role,
-    name: target.name
+    name: target.name,
+    email: target.email || target.username,
+    maxHoursPerWeek: target.maxHoursPerWeek != null ? target.maxHoursPerWeek : 40,
+    skills: Array.isArray(target.skills) ? target.skills : []
   });
 });
 
@@ -505,6 +533,71 @@ app.delete("/api/employees/:id", function (req, res) {
   users = users.filter(function (u) { return u.id !== id; });
   shifts = shifts.filter(function (s) { return s.employee !== target.name; });
   res.status(204).send();
+});
+
+app.get("/api/availability", function (req, res) {
+  var userId = Number(req.query.userId);
+  if (!userId) {
+    res.json({});
+    return;
+  }
+  var found = null;
+  for (var i = 0; i < availabilityList.length; i++) {
+    if (availabilityList[i].userId === userId) {
+      found = availabilityList[i];
+      break;
+    }
+  }
+  if (!found) {
+    res.json({});
+    return;
+  }
+  res.json({
+    userId: found.userId,
+    days: found.days || [],
+    timeFrom: found.timeFrom || "09:00",
+    timeTo: found.timeTo || "17:00"
+  });
+});
+
+app.get("/api/availability/all", function (req, res) {
+  res.json(availabilityList);
+});
+
+app.put("/api/availability", function (req, res) {
+  var userId = Number(req.body.userId);
+  var days = req.body.days;
+  var timeFrom = req.body.timeFrom;
+  var timeTo = req.body.timeTo;
+
+  if (!userId) {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  var validDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var dayList = [];
+  if (Array.isArray(days)) {
+    for (var d = 0; d < days.length; d++) {
+      if (validDays.indexOf(days[d]) >= 0) dayList.push(days[d]);
+    }
+  }
+  var from = (timeFrom && String(timeFrom).trim()) ? String(timeFrom).trim() : "09:00";
+  var to = (timeTo && String(timeTo).trim()) ? String(timeTo).trim() : "17:00";
+
+  var found = -1;
+  for (var i = 0; i < availabilityList.length; i++) {
+    if (availabilityList[i].userId === userId) {
+      found = i;
+      break;
+    }
+  }
+  var record = { userId: userId, days: dayList, timeFrom: from, timeTo: to };
+  if (found >= 0) {
+    availabilityList[found] = record;
+  } else {
+    availabilityList.push(record);
+  }
+  res.json(record);
 });
 
 var PORT = 4000;
