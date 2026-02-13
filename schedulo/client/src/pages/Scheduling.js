@@ -10,12 +10,6 @@ var WEEK_DAYS = [
   { day: "Sun", date: "Nov 23" }
 ];
 
-var DEFAULT_SUNDAY_SHIFTS = [
-  { employee: "Sami", time: "09:00 - 17:00", role: "Floor Manager", tone: "blue" },
-  { employee: "Krishna", time: "11:00 - 19:00", role: "Server", tone: "green" },
-  { employee: "Tigran", time: "10:00 - 18:00", role: "Cook", tone: "red" }
-];
-
 function getWeekMondayStr() {
   var d = new Date();
   var day = d.getDay();
@@ -51,6 +45,9 @@ function Scheduling({ user }) {
   const [endDate, setEndDate] = useState(defaultEnd);
   const [weekShifts, setWeekShifts] = useState([]);
   const [addShiftDate, setAddShiftDate] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generateMessage, setGenerateMessage] = useState("");
+  const [clearMessage, setClearMessage] = useState("");
 
   function loadWeekShifts(weekStart) {
     if (!weekStart) return;
@@ -84,6 +81,50 @@ function Scheduling({ user }) {
     setStartDate(newDate);
     setEndDate(getEndDateFromStart(newDate));
     loadWeekShifts(newDate);
+  }
+
+  function handleClearEntireSchedule() {
+    if (window.confirm("Clear all shifts? You can regenerate with Auto scheduled.") !== true) return;
+    setClearMessage("");
+    fetch("http://localhost:4000/api/shifts/clear", { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        setClearMessage("Schedule cleared. " + (data.removed || 0) + " shift(s) removed.");
+        if (startDate) loadWeekShifts(startDate);
+      })
+      .catch(function () {
+        setClearMessage("Failed to clear schedule.");
+      });
+  }
+
+  function handleCleanAndFill() {
+    if (!startDate) return;
+    setGenerateMessage("");
+    setGenerating(true);
+    fetch("http://localhost:4000/api/schedules/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weekStart: startDate,
+        weekEnd: endDate,
+        cleanFirst: true
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          setGenerateMessage(data.error);
+        } else {
+          setGenerateMessage("Schedule cleared and filled: " + data.created + " shifts added.");
+          loadWeekShifts(startDate);
+        }
+      })
+      .catch(function () {
+        setGenerateMessage("Failed to generate schedule.");
+      })
+      .finally(function () {
+        setGenerating(false);
+      });
   }
 
   function addShift() {
@@ -161,9 +202,6 @@ function Scheduling({ user }) {
         });
       }
     }
-    if (result.length === 0) {
-      return DEFAULT_SUNDAY_SHIFTS.map(function (s) { return { employee: s.employee, time: s.time, role: s.role, tone: s.tone }; });
-    }
     return result;
   }
 
@@ -230,12 +268,48 @@ function Scheduling({ user }) {
                   Save Shift
                 </button>
               </div>
+              <p className="form-message" style={{ marginTop: 8, fontSize: 12, color: "#526281" }}>
+                Shifts can only be assigned on days the employee has set in My Availability (Dashboard).
+              </p>
               {message && <p className="form-message">{message}</p>}
+            </section>
+          )}
+          {isManager && (
+            <section className="info-block" style={{ marginBottom: 16 }}>
+              <h3>Fill schedule from availability</h3>
+              <p className="form-message" style={{ marginBottom: 8 }}>
+                Clear all shifts, then use Auto scheduled to fill based on each employee&apos;s availability (Dashboard).
+              </p>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={handleClearEntireSchedule}
+                >
+                  Clear entire schedule
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleCleanAndFill}
+                  disabled={generating}
+                >
+                  {generating ? "Generating…" : "Auto scheduled"}
+                </button>
+                {clearMessage && (
+                  <span className="form-message">{clearMessage}</span>
+                )}
+                {generateMessage && (
+                  <span className={generateMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"}>
+                    {generateMessage}
+                  </span>
+                )}
+              </div>
             </section>
           )}
           <section className="calendar-shell">
             <p className="form-message" style={{ marginBottom: 8 }}>
-              Week: {startDate} to {endDate}.{isManager ? " Add shifts using the button above." : " View the schedule for this week."}
+              Week: {startDate} to {endDate}.{isManager ? " Add shifts above or clean & fill from availability." : " View the schedule for this week."}
             </p>
             <div className="date-input-wrap" style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
               <label className="field-label" style={{ marginBottom: 0 }}>Week</label>

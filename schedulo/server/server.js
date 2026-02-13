@@ -15,10 +15,7 @@ var users = [
   { id: 2, username: "employee", password: "1234", role: "employee", name: "Krishna", email: "krishna@gmail.com", maxHoursPerWeek: 40, skills: ["Customer Service", "POS", "Food Handling"] }
 ];
 
-var shifts = [
-  { id: 1, employee: "Krishna", time: "09:00 - 17:00" },
-  { id: 2, employee: "Sami", time: "10:00 - 18:00" }
-];
+var shifts = [];
 
 var ptoRequests = [
   {
@@ -66,6 +63,49 @@ function getNextId(arr) {
   return max + 1;
 }
 
+var DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function getDayOfWeekFromDate(dateStr) {
+  var d = new Date(dateStr + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return null;
+  return DAY_NAMES[d.getDay()];
+}
+
+function findUserByEmployeeName(employeeName) {
+  var name = String(employeeName || "").trim();
+  for (var i = 0; i < users.length; i++) {
+    if (users[i].name === name || users[i].username === name) return users[i];
+  }
+  return null;
+}
+
+function getAvailabilityByUserId(userId) {
+  for (var i = 0; i < availabilityList.length; i++) {
+    if (availabilityList[i].userId === userId) return availabilityList[i];
+  }
+  return null;
+}
+
+function isEmployeeAvailableOnDate(employeeName, dateStr) {
+  var user = findUserByEmployeeName(employeeName);
+  if (!user) return false;
+  var av = getAvailabilityByUserId(user.id);
+  if (!av || !av.days || av.days.length === 0) return false;
+  var day = getDayOfWeekFromDate(dateStr);
+  if (!day) return false;
+  return av.days.indexOf(day) >= 0;
+}
+
+function getShiftTimeFromAvailability(employeeName) {
+  var user = findUserByEmployeeName(employeeName);
+  if (!user) return "09:00 - 17:00";
+  var av = getAvailabilityByUserId(user.id);
+  if (!av) return "09:00 - 17:00";
+  var from = (av.timeFrom && av.timeFrom.trim()) ? av.timeFrom.trim() : "09:00";
+  var to = (av.timeTo && av.timeTo.trim()) ? av.timeTo.trim() : "17:00";
+  return from + " - " + to;
+}
+
 app.get("/api/shifts", function (req, res) {
   var weekStart = req.query.weekStart;
   if (!weekStart) {
@@ -87,6 +127,35 @@ app.get("/api/shifts", function (req, res) {
     if (d >= start && d < end) result.push(s);
   }
   res.json(result);
+});
+
+app.delete("/api/shifts/clear", function (req, res) {
+  var count = shifts.length;
+  shifts = [];
+  res.json({ removed: count });
+});
+
+app.delete("/api/shifts/week", function (req, res) {
+  var weekStart = req.query.weekStart;
+  if (!weekStart) {
+    res.status(400).json({ error: "weekStart (YYYY-MM-DD) is required" });
+    return;
+  }
+  var start = new Date(weekStart);
+  if (Number.isNaN(start.getTime())) {
+    res.status(400).json({ error: "Invalid weekStart" });
+    return;
+  }
+  var end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  var before = shifts.length;
+  shifts = shifts.filter(function (s) {
+    if (!s.date) return true;
+    var d = new Date(s.date);
+    return d < start || d >= end;
+  });
+  var removed = before - shifts.length;
+  res.json({ removed: removed });
 });
 
 app.post("/api/shifts", function (req, res) {
@@ -118,6 +187,11 @@ app.post("/api/shifts", function (req, res) {
     }
   }
 
+  if (shiftDate && !isEmployeeAvailableOnDate(employee, shiftDate)) {
+    res.status(400).json({ error: "Employee is not available on this day" });
+    return;
+  }
+
   var newShift = {
     id: getNextId(shifts),
     employee: employee.trim(),
@@ -129,15 +203,10 @@ app.post("/api/shifts", function (req, res) {
   res.json(newShift);
 });
 
-var shiftTemplates = [
-  { role: "Floor Manager", time: "09:00 - 17:00" },
-  { role: "Server", time: "11:00 - 19:00" },
-  { role: "Cook", time: "10:00 - 18:00" }
-];
-
 app.post("/api/schedules/generate", function (req, res) {
   var weekStart = req.body.weekStart;
   var weekEnd = req.body.weekEnd;
+  var cleanFirst = req.body.cleanFirst === true || req.body.cleanFirst === "true";
 
   if (!weekStart) {
     res.status(400).json({ error: "weekStart (YYYY-MM-DD) is required" });
@@ -151,18 +220,29 @@ app.post("/api/schedules/generate", function (req, res) {
 
   var numDays = 7;
   if (weekEnd) {
-    var end = new Date(weekEnd);
-    if (!Number.isNaN(end.getTime()) && end >= start) {
-      var diff = Math.floor((end - start) / (24 * 60 * 60 * 1000)) + 1;
+    var endDate = new Date(weekEnd);
+    if (!Number.isNaN(endDate.getTime()) && endDate >= start) {
+      var diff = Math.floor((endDate - start) / (24 * 60 * 60 * 1000)) + 1;
       numDays = diff;
       if (numDays > 7) numDays = 7;
       if (numDays < 1) numDays = 1;
     }
   }
 
+  var weekEndDate = new Date(start);
+  weekEndDate.setDate(weekEndDate.getDate() + numDays);
+
+  if (cleanFirst) {
+    shifts = shifts.filter(function (s) {
+      if (!s.date) return true;
+      var d = new Date(s.date);
+      return d < start || d >= weekEndDate;
+    });
+  }
+
   var employeeNames = [];
   for (var u = 0; u < users.length; u++) {
-    if (users[u].role === "employee" && users[u].name) employeeNames.push(users[u].name);
+    if (users[u].name) employeeNames.push(users[u].name);
   }
   if (employeeNames.indexOf("Sami") === -1) employeeNames.push("Sami");
   if (employeeNames.indexOf("Krishna") === -1) employeeNames.push("Krishna");
@@ -170,8 +250,8 @@ app.post("/api/schedules/generate", function (req, res) {
   if (employeeNames.indexOf("Damon") === -1) employeeNames.push("Damon");
   if (employeeNames.indexOf("Karim") === -1) employeeNames.push("Karim");
 
-  if (employeeNames.length < 3) {
-    res.status(400).json({ error: "Need at least 3 employees to generate schedule" });
+  if (employeeNames.length < 2) {
+    res.status(400).json({ error: "Need at least 2 employees to generate schedule" });
     return;
   }
 
@@ -185,10 +265,14 @@ app.post("/api/schedules/generate", function (req, res) {
     if (mo < 10) mo = "0" + mo;
     if (da < 10) da = "0" + da;
     var dateStr = y + "-" + mo + "-" + da;
-    for (var t = 0; t < shiftTemplates.length; t++) {
-      var empIndex = (d + t) % employeeNames.length;
-      var emp = employeeNames[empIndex];
-      var time = shiftTemplates[t].time;
+    var availableNames = [];
+    for (var n = 0; n < employeeNames.length; n++) {
+      if (isEmployeeAvailableOnDate(employeeNames[n], dateStr)) availableNames.push(employeeNames[n]);
+    }
+    var slotsPerDay = Math.min(3, availableNames.length);
+    for (var t = 0; t < slotsPerDay; t++) {
+      var empIndex = (d + t) % availableNames.length;
+      var emp = availableNames[empIndex];
       var exists = false;
       for (var s = 0; s < shifts.length; s++) {
         if (shifts[s].employee === emp && shifts[s].date === dateStr) {
@@ -197,7 +281,8 @@ app.post("/api/schedules/generate", function (req, res) {
         }
       }
       if (exists) continue;
-      var ns = { id: getNextId(shifts), employee: emp, time: time, date: dateStr };
+      var timeStr = getShiftTimeFromAvailability(emp);
+      var ns = { id: getNextId(shifts), employee: emp, time: timeStr, date: dateStr };
       shifts.push(ns);
       created.push(ns);
     }
