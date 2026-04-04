@@ -11,8 +11,8 @@ app.get("/", function (req, res) {
 });
 
 var users = [
-  { id: 1, username: "manager", password: "1234", role: "manager", name: "Sami", email: "sami@gmail.com", maxHoursPerWeek: 40, skills: ["Leadership", "Customer Service"] },
-  { id: 2, username: "employee", password: "1234", role: "employee", name: "Krishna", email: "krishna@gmail.com", maxHoursPerWeek: 40, skills: ["Customer Service", "POS", "Food Handling"] }
+  { id: 1, username: "manager", password: "1234", role: "manager", name: "Sami", email: "sami@gmail.com", maxHoursPerWeek: 40, skills: ["Leadership", "Customer Service"], color: "#FF5733" },
+  { id: 2, username: "employee", password: "1234", role: "employee", name: "Krishna", email: "krishna@gmail.com", maxHoursPerWeek: 40, skills: ["Customer Service", "POS", "Food Handling"], color: "#33FF57" }
 ];
 
 var shifts = [];
@@ -109,12 +109,32 @@ function getShiftTimeFromAvailability(employeeName) {
 app.get("/api/shifts", function (req, res) {
   var weekStart = req.query.weekStart;
   if (!weekStart) {
-    res.json(shifts);
+    // res.json(shifts);
+    var enriched = shifts.map(function (s) {
+  var user = findUserByEmployeeName(s.employee);
+  return {
+    ...s,
+    color: user ? user.color : "#999999",
+    role: user ? user.role : "employee"
+  };
+});
+
+res.json(enriched);
     return;
   }
   var start = new Date(weekStart);
   if (Number.isNaN(start.getTime())) {
-    res.json(shifts);
+    // res.json(shifts);
+    var enriched = shifts.map(function (s) {
+  var user = findUserByEmployeeName(s.employee);
+  return {
+    ...s,
+    color: user ? user.color : "#999999",
+    role: user ? user.role : "employee"
+  };
+});
+
+res.json(enriched);
     return;
   }
   var end = new Date(start);
@@ -126,7 +146,17 @@ app.get("/api/shifts", function (req, res) {
     var d = new Date(s.date);
     if (d >= start && d < end) result.push(s);
   }
-  res.json(result);
+  // res.json(result);
+  var enriched = result.map(function (s) {
+  var user = findUserByEmployeeName(s.employee);
+  return {
+    ...s,
+    color: user ? user.color : "#999999",
+    role: user ? user.role : "employee"
+  };
+});
+
+res.json(enriched);
 });
 
 app.delete("/api/shifts/clear", function (req, res) {
@@ -514,7 +544,8 @@ app.get("/api/employees", function (req, res) {
       role: u.role,
       email: u.email || u.username,
       maxHoursPerWeek: u.maxHoursPerWeek != null ? u.maxHoursPerWeek : 40,
-      skills: Array.isArray(u.skills) ? u.skills : []
+      skills: Array.isArray(u.skills) ? u.skills : [],
+      color: u.color || "#999999"
     });
   }
   res.json(list);
