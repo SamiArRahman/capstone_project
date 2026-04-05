@@ -23,7 +23,6 @@ function Employees({ user }) {
   var [addMaxHours, setAddMaxHours] = useState(40);
   var [addSkills, setAddSkills] = useState("");
   var [message, setMessage] = useState("");
-  var [successNote, setSuccessNote] = useState("");
 
   function loadEmployees() {
     setLoading(true);
@@ -112,12 +111,10 @@ function Employees({ user }) {
     setAddMaxHours(40);
     setAddSkills("");
     setMessage("");
-    setSuccessNote("");
   }
 
   function handleAddSave() {
     setMessage("");
-    setSuccessNote("");
     if (!addUsername.trim() || !addPassword) {
       setMessage("Username and password are required.");
       return;
@@ -146,8 +143,6 @@ function Employees({ user }) {
     })
       .then(function (data) {
         if (data && data.id) {
-          setMessage("");
-          setSuccessNote("Employee added.");
           setShowAddForm(false);
           loadEmployees();
           loadAvailabilityAll();
@@ -159,7 +154,6 @@ function Employees({ user }) {
   function handleAddCancel() {
     setShowAddForm(false);
     setMessage("");
-    setSuccessNote("");
   }
 
   function getRoleDisplayName(role) {
@@ -197,11 +191,6 @@ function Employees({ user }) {
       </header>
 
       {error && <p className="form-message error-text">{error}</p>}
-      {successNote && (
-        <p className="form-message" style={{ color: "var(--green)", fontWeight: 600 }}>
-          {successNote}
-        </p>
-      )}
 
       {isManager && showAddForm && (
         <section className="info-block" style={{ marginTop: 16 }}>

@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import "./App.css";
 import Navbar from "./components/Navbar";
-import NotificationBell from "./components/NotificationBell";
 import Dashboard from "./pages/Dashboard";
 import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
@@ -87,7 +86,6 @@ function App() {
           <div className="profile-area">
             <span className="view-pill">{managerView ? "Manager View" : "Employee View"}</span>
             <span className="profile-name">{user.name || user.username}</span>
-            <NotificationBell user={user} />
             <button className="ghost-button" onClick={handleLogout}>
               Logout
             </button>

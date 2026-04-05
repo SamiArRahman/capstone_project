@@ -3,17 +3,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
 const mongoose = require("mongoose");
-const {
-  AuditLog,
-  Availability,
-  NotificationAck,
-  PtoRequest,
-  ScheduleNotification,
-  Shift,
-  SwapRequest,
-  User,
-  connectToDatabase
-} = require("./db");
+const { AuditLog, Availability, PtoRequest, Shift, SwapRequest, User, connectToDatabase } = require("./db");
 const { DEFAULT_SHIFT_END, DEFAULT_SHIFT_START, DAY_NAMES, REQUEST_STATUSES, VALID_AVAILABILITY_DAYS } = require("./config");
 const { comparePassword, hashPassword, signToken, verifyToken } = require("./security");
 
@@ -91,16 +81,6 @@ function isIsoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
 }
 
-function formatLocalYmd(date) {
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function getDayName(dateStr) {
   const date = new Date(`${dateStr}T12:00:00`);
   if (Number.isNaN(date.getTime())) {
@@ -114,7 +94,7 @@ function getDateRange(startDate, endDate) {
   const current = new Date(`${startDate}T12:00:00`);
   const end = new Date(`${endDate}T12:00:00`);
   while (current <= end && result.length < 31) {
-    result.push(formatLocalYmd(current));
+    result.push(current.toISOString().slice(0, 10));
     current.setDate(current.getDate() + 1);
   }
   return result;
@@ -123,7 +103,7 @@ function getDateRange(startDate, endDate) {
 function getWeekEndDate(weekStart) {
   const current = new Date(`${weekStart}T12:00:00`);
   current.setDate(current.getDate() + 6);
-  return formatLocalYmd(current);
+  return current.toISOString().slice(0, 10);
 }
 
 function clampWeekEndDate(weekStart, weekEnd) {
@@ -136,7 +116,7 @@ function clampWeekEndDate(weekStart, weekEnd) {
   if (Number.isNaN(end.getTime()) || end < start) {
     return getWeekEndDate(weekStart);
   }
-  return formatLocalYmd(end > max ? max : end);
+  return (end > max ? max : end).toISOString().slice(0, 10);
 }
 
 function serializeUser(user) {
@@ -231,17 +211,6 @@ function serializeSwapRequest(request) {
     reviewedAt: request.reviewedAt,
     shiftId: request.shift ? String(request.shift) : null
   };
-}
-
-async function pushScheduleNotification(message) {
-  const text = String(message || "").trim() || "Schedule update";
-  await ScheduleNotification.create({ message: text });
-  const total = await ScheduleNotification.countDocuments({});
-  if (total > 150) {
-    const drop = total - 150;
-    const oldest = await ScheduleNotification.find().sort({ createdAt: 1 }).limit(drop).select("_id");
-    await ScheduleNotification.deleteMany({ _id: { $in: oldest.map((doc) => doc._id) } });
-  }
 }
 
 async function logAudit(actor, action, entityType, entityId, details) {
@@ -392,31 +361,28 @@ app.get("/api/me", function currentUserHandler(req, res) {
 });
 
 async function ensureEmployeeIsSchedulable(user, date, startTime, endTime) {
+  const availability = await getAvailabilityForUser(user._id);
   const dayName = getDayName(date);
-  const isWeekend = dayName === "Sat" || dayName === "Sun";
-  if (!isWeekend) {
-    const availability = await getAvailabilityForUser(user._id);
-    if (!availability || !Array.isArray(availability.days) || availability.days.indexOf(dayName) === -1) {
-      return { ok: false, error: "Employee is not available on this day" };
-    }
-    if (
-      timeToMinutes(startTime) < timeToMinutes(availability.timeFrom || DEFAULT_SHIFT_START) ||
-      timeToMinutes(endTime) > timeToMinutes(availability.timeTo || DEFAULT_SHIFT_END)
-    ) {
-      return { ok: false, error: "Shift falls outside the employee's availability window" };
-    }
+  if (!availability || !Array.isArray(availability.days) || availability.days.indexOf(dayName) === -1) {
+    return { ok: false, error: "Employee is not available on this day" };
+  }
+  if (
+    timeToMinutes(startTime) < timeToMinutes(availability.timeFrom || DEFAULT_SHIFT_START) ||
+    timeToMinutes(endTime) > timeToMinutes(availability.timeTo || DEFAULT_SHIFT_END)
+  ) {
+    return { ok: false, error: "Shift falls outside the employee's availability window" };
   }
   if (await hasApprovedPto(user._id, date)) {
     return { ok: false, error: "Employee has approved PTO on this date" };
   }
-  if (await Shift.findOne({ employee: user._id, date, startTime, endTime })) {
-    return { ok: false, error: "This shift already exists for that employee and time" };
+  if (await Shift.findOne({ employee: user._id, date })) {
+    return { ok: false, error: "Employee already has a shift on this date" };
   }
   const weekStartDate = new Date(`${date}T12:00:00`);
   const diff = weekStartDate.getDay();
   const mondayOffset = diff === 0 ? -6 : 1 - diff;
   weekStartDate.setDate(weekStartDate.getDate() + mondayOffset);
-  const weekStart = formatLocalYmd(weekStartDate);
+  const weekStart = weekStartDate.toISOString().slice(0, 10);
   const weekEnd = getWeekEndDate(weekStart);
   const weekShifts = await Shift.find({
     employee: user._id,
@@ -628,14 +594,12 @@ app.post("/api/shifts", requireManager, asyncHandler(async (req, res) => {
   });
   await shift.populate("employee", "name username");
   await logAudit(req.user, "shift_created", "shift", shift._id, { employeeId: String(employee._id), date, time: req.body.time });
-  await pushScheduleNotification(`New shift: ${employee.name || employee.username} on ${date}.`);
   res.status(201).json(serializeShift(shift));
 }));
 
 app.delete("/api/shifts/clear", requireManager, asyncHandler(async (req, res) => {
   const result = await Shift.deleteMany({});
   await logAudit(req.user, "schedule_cleared", "shift", "all", { removed: result.deletedCount || 0 });
-  await pushScheduleNotification(`Schedule cleared (${result.deletedCount || 0} shift(s) removed).`);
   res.json({ removed: result.deletedCount || 0 });
 }));
 
@@ -682,66 +646,32 @@ app.post("/api/schedules/generate", requireManager, asyncHandler(async (req, res
     ptoByEmployee.set(key, dates);
   });
   const created = [];
-  const defaultBlockHours = Math.max(
-    0,
-    (timeToMinutes(DEFAULT_SHIFT_END) - timeToMinutes(DEFAULT_SHIFT_START)) / 60
-  );
   for (let dayIndex = 0; dayIndex < daysInRange.length; dayIndex += 1) {
     const date = daysInRange[dayIndex];
     const dayName = getDayName(date);
-    const isWeekend = dayName === "Sat" || dayName === "Sun";
-    const anyoneMarkedWeekendDay =
-      isWeekend &&
-      employees.some((employee) => {
-        const availability = availabilityMap.get(String(employee._id));
-        return availability && availability.days.indexOf(dayName) >= 0;
-      });
-    const availableEmployees = employees
-      .filter((employee) => {
-        if ((ptoByEmployee.get(String(employee._id)) || new Set()).has(date)) {
-          return false;
-        }
-        if (isWeekend && !anyoneMarkedWeekendDay) {
-          const shiftHours = defaultBlockHours;
-          return (
-            !existingShiftKeys.has(`${employee._id}:${date}`) &&
-            (hoursByUser.get(String(employee._id)) || 0) + shiftHours <= (employee.maxHoursPerWeek || 40)
-          );
-        }
-        const availability = availabilityMap.get(String(employee._id));
-        const shiftHours = availability
-          ? Math.max(0, (timeToMinutes(availability.timeTo) - timeToMinutes(availability.timeFrom)) / 60)
-          : 0;
-        return (
-          availability &&
-          availability.days.indexOf(dayName) >= 0 &&
-          !existingShiftKeys.has(`${employee._id}:${date}`) &&
-          (hoursByUser.get(String(employee._id)) || 0) + shiftHours <= (employee.maxHoursPerWeek || 40)
-        );
-      })
-      .sort((left, right) => {
-        const leftHours = hoursByUser.get(String(left._id)) || 0;
-        const rightHours = hoursByUser.get(String(right._id)) || 0;
-        if (leftHours !== rightHours) return leftHours - rightHours;
-        if (left.role !== right.role) return left.role === "employee" ? -1 : 1;
-        return String(left.name || left.username).localeCompare(String(right.name || right.username));
-      });
+    const availableEmployees = employees.filter((employee) => {
+      const availability = availabilityMap.get(String(employee._id));
+      const shiftHours = availability ? Math.max(0, (timeToMinutes(availability.timeTo) - timeToMinutes(availability.timeFrom)) / 60) : 0;
+      return availability &&
+        availability.days.indexOf(dayName) >= 0 &&
+        !existingShiftKeys.has(`${employee._id}:${date}`) &&
+        !(ptoByEmployee.get(String(employee._id)) || new Set()).has(date) &&
+        (hoursByUser.get(String(employee._id)) || 0) + shiftHours <= (employee.maxHoursPerWeek || 40);
+    }).sort((left, right) => {
+      const leftHours = hoursByUser.get(String(left._id)) || 0;
+      const rightHours = hoursByUser.get(String(right._id)) || 0;
+      if (leftHours !== rightHours) return leftHours - rightHours;
+      if (left.role !== right.role) return left.role === "employee" ? -1 : 1;
+      return String(left.name || left.username).localeCompare(String(right.name || right.username));
+    });
     for (let slotIndex = 0; slotIndex < Math.min(3, availableEmployees.length); slotIndex += 1) {
       const employee = availableEmployees[slotIndex];
       const availability = availabilityMap.get(String(employee._id));
-      const startTime =
-        isWeekend && !anyoneMarkedWeekendDay
-          ? DEFAULT_SHIFT_START
-          : availability.timeFrom || DEFAULT_SHIFT_START;
-      const endTime =
-        isWeekend && !anyoneMarkedWeekendDay
-          ? DEFAULT_SHIFT_END
-          : availability.timeTo || DEFAULT_SHIFT_END;
       const shift = await Shift.create({
         employee: employee._id,
         date,
-        startTime,
-        endTime,
+        startTime: availability.timeFrom || DEFAULT_SHIFT_START,
+        endTime: availability.timeTo || DEFAULT_SHIFT_END,
         roleLabel: "Team Member",
         source: "auto",
         createdBy: req.user._id
@@ -753,7 +683,6 @@ app.post("/api/schedules/generate", requireManager, asyncHandler(async (req, res
     }
   }
   await logAudit(req.user, "schedule_generated", "shift", weekStart, { weekStart, weekEnd, cleanFirst, created: created.length });
-  await pushScheduleNotification(`Auto scheduled: ${created.length} shift(s) for ${weekStart}–${weekEnd}.`);
   res.status(201).json({ created: created.length, shifts: created });
 }));
 
@@ -921,28 +850,6 @@ app.get("/api/requests/summary", asyncHandler(async (req, res) => {
     SwapRequest.countDocuments(swapFilter)
   ]);
   res.json({ pendingPto, pendingSwaps, pendingTotal: pendingPto + pendingSwaps });
-}));
-
-app.get("/api/notifications", asyncHandler(async (req, res) => {
-  const items = await ScheduleNotification.find({}).sort({ createdAt: -1 }).limit(100).lean();
-  const ack = await NotificationAck.findOne({ user: req.user._id });
-  const lastMs = ack && ack.lastReadAt ? ack.lastReadAt.getTime() : 0;
-  const serialized = items.map((entry) => ({
-    id: String(entry._id),
-    message: entry.message,
-    createdAt: entry.createdAt
-  }));
-  const unreadCount = items.filter((entry) => new Date(entry.createdAt).getTime() > lastMs).length;
-  res.json({ items: serialized, unreadCount });
-}));
-
-app.post("/api/notifications/ack", asyncHandler(async (req, res) => {
-  await NotificationAck.findOneAndUpdate(
-    { user: req.user._id },
-    { user: req.user._id, lastReadAt: new Date() },
-    { upsert: true, new: true }
-  );
-  res.json({ ok: true });
 }));
 
 app.get("/api/audit", requireManager, asyncHandler(async (req, res) => {

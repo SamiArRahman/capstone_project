@@ -15,7 +15,9 @@ function Navbar({ user }) {
           return;
         }
         setPendingCount(Number(data.pendingTotal) || 0);
-      } catch {}
+      } catch {
+        // Ignore transient API/network errors for top nav badge.
+      }
     };
 
     loadSummary();
@@ -35,7 +37,7 @@ function Navbar({ user }) {
     { to: "/analytics", label: "Analytics", managerOnly: true }
   ];
 
-  const visibleLinks = links.filter(link => !link.managerOnly || user?.role === "manager");
+  const visibleLinks = links.filter(link => !link.managerOnly || user.role === "manager");
 
   return (
     <nav className="tab-nav">

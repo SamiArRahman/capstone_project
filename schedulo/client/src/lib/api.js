@@ -29,7 +29,6 @@ export async function apiFetch(path, options = {}) {
   const session = loadStoredSession();
   const headers = new Headers(options.headers || {});
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
-  const pathPart = String(path || "").startsWith("/") ? path : `/${path}`;
 
   if (options.body && !isFormData && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -39,7 +38,7 @@ export async function apiFetch(path, options = {}) {
     headers.set("Authorization", `Bearer ${session.token}`);
   }
 
-  const response = await fetch(`${API_BASE}${pathPart}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers
   });

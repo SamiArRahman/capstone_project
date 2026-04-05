@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
-import { parseYmdLocal, addDaysYmdLocal, getWeekMondayYmdToday } from "../utils/calendar";
+
+function getWeekMondayStr() {
+  var d = new Date();
+  var day = d.getDay();
+  var diff = d.getDate() - (day === 0 ? 6 : day - 1);
+  var monday = new Date(d);
+  monday.setDate(diff);
+  var y = monday.getFullYear();
+  var m = String(monday.getMonth() + 1);
+  if (m.length === 1) m = "0" + m;
+  var date = String(monday.getDate());
+  if (date.length === 1) date = "0" + date;
+  return y + "-" + m + "-" + date;
+}
 
 function parseShiftHours(timeStr) {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -17,7 +30,7 @@ function parseShiftHours(timeStr) {
 
 function formatDayLabel(dateStr) {
   if (!dateStr) return "";
-  var d = parseYmdLocal(dateStr);
+  var d = new Date(dateStr + "T12:00:00");
   if (Number.isNaN(d.getTime())) return dateStr;
   var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return dayNames[d.getDay()] + ", " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -36,7 +49,7 @@ function Dashboard({ user }) {
   var [availabilitySaveMessage, setAvailabilitySaveMessage] = useState("");
 
   useEffect(function () {
-    var weekStart = getWeekMondayYmdToday();
+    var weekStart = getWeekMondayStr();
     var mounted = true;
 
     Promise.all([
@@ -63,7 +76,7 @@ function Dashboard({ user }) {
   }, []);
 
   useEffect(function () {
-    if (!user || !user.id) return;
+    if (!user || !user.id || user.role === "manager") return;
     var mounted = true;
     apiFetch("/availability?userId=" + encodeURIComponent(user.id))
       .then(function (data) {
@@ -118,11 +131,17 @@ function Dashboard({ user }) {
     byDate[d].hours += parseShiftHours(s.time);
   });
 
-  var weekStart = getWeekMondayYmdToday();
+  var weekStart = getWeekMondayStr();
   var coverageDays = [];
   for (var i = 0; i < 7; i++) {
-    var dateStr = addDaysYmdLocal(weekStart, i);
-    if (!dateStr) continue;
+    var d = new Date(weekStart + "T12:00:00");
+    d.setDate(d.getDate() + i);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1);
+    if (m.length === 1) m = "0" + m;
+    var date = String(d.getDate());
+    if (date.length === 1) date = "0" + date;
+    var dateStr = y + "-" + m + "-" + date;
     var info = byDate[dateStr] || { shifts: 0, employees: new Set(), hours: 0 };
     coverageDays.push({
       day: formatDayLabel(dateStr),
@@ -135,39 +154,12 @@ function Dashboard({ user }) {
 
   var lowCoverageCount = coverageDays.filter(function (c) { return c.employees < 2; }).length;
 
-  function shiftMatchesLoggedInUser(employeeStr) {
-    if (!user) return false;
-    var n = String(employeeStr || "").trim().toLowerCase();
-    var un = String(user.name || "").trim().toLowerCase();
-    var uu = String(user.username || "").trim().toLowerCase();
-    return n === un || n === uu;
-  }
-
   var isManager = user && user.role === "manager";
   var myShifts = weekShifts.filter(function (s) {
-    return shiftMatchesLoggedInUser(s.employee);
+    var name = user && (user.name || user.username || "");
+    return s.employee === name || s.employee === (user && user.username);
   });
   var myHours = myShifts.reduce(function (acc, s) { return acc + parseShiftHours(s.time); }, 0);
-
-  var myShiftsByDate = {};
-  for (var ms = 0; ms < myShifts.length; ms++) {
-    var sd = myShifts[ms].date || "";
-    if (!myShiftsByDate[sd]) {
-      myShiftsByDate[sd] = { date: sd, times: [], seen: {} };
-    }
-    var tms = String(myShifts[ms].time || "").trim();
-    if (tms && !myShiftsByDate[sd].seen[tms]) {
-      myShiftsByDate[sd].seen[tms] = true;
-      myShiftsByDate[sd].times.push(tms);
-    }
-  }
-  var myShiftDayRows = Object.keys(myShiftsByDate)
-    .sort()
-    .map(function (dk) {
-      var row = myShiftsByDate[dk];
-      row.times.sort();
-      return row;
-    });
 
   if (loading) {
     return (
@@ -231,73 +223,76 @@ function Dashboard({ user }) {
         </div>
       </section>
 
-      <section className="info-block">
-        <h3>My shifts this week</h3>
-        {myShifts.length === 0 ? (
-          <p className="form-message">You have no shifts scheduled this week.</p>
-        ) : (
-          <>
-            <p className="form-message" style={{ marginBottom: 8 }}>
-              {myShifts.length} shift(s) – {myHours.toFixed(1)} hours total
-            </p>
-            <div className="coverage-list">
-              {myShiftDayRows.map(function (row) {
+      {!isManager && (
+        <>
+          <section className="info-block">
+            <h3>My shifts this week</h3>
+            {myShifts.length === 0 ? (
+              <p className="form-message">You have no shifts scheduled this week.</p>
+            ) : (
+              <>
+                <p className="form-message" style={{ marginBottom: 8 }}>
+                  {myShifts.length} shift(s) - {myHours.toFixed(1)} hours total
+                </p>
+                <div className="coverage-list">
+                  {myShifts.map(function (s) {
+                    var dayLabel = formatDayLabel(s.date);
+                    return (
+                      <div key={(s.date || "") + "-" + s.employee + "-" + (s.time || "")} className="coverage-row">
+                        <span>{dayLabel}</span>
+                        <span>{s.time || "-"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </section>
+          <section className="info-block">
+            <h3>My availability</h3>
+            <p className="form-message" style={{ marginBottom: 8 }}>Set which days and times you can work.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {DAYS_OF_WEEK.map(function (day) {
+                var checked = availabilityDays.indexOf(day) >= 0;
                 return (
-                  <div key={row.date || "x"} className="coverage-row">
-                    <span>{formatDayLabel(row.date)}</span>
-                    <span>{row.times.length ? row.times.join(" · ") : "—"}</span>
-                  </div>
+                  <label key={day} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={function () { toggleAvailabilityDay(day); }}
+                    />
+                    <span>{day}</span>
+                  </label>
                 );
               })}
             </div>
-          </>
-        )}
-      </section>
-      <section className="info-block">
-        <h3>My availability</h3>
-        <p className="form-message" style={{ marginBottom: 8 }}>
-          Days you check here are used for Auto scheduled (weekdays). Weekends fall back to the full team if a day has no one marked.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          {DAYS_OF_WEEK.map(function (day) {
-            var checked = availabilityDays.indexOf(day) >= 0;
-            return (
-              <label key={day} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={function () { toggleAvailabilityDay(day); }}
-                />
-                <span>{day}</span>
-              </label>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-          <label className="field-label" style={{ marginBottom: 0 }}>From</label>
-          <input
-            type="time"
-            className="field-input"
-            style={{ width: "auto" }}
-            value={availabilityTimeFrom}
-            onChange={function (e) { setAvailabilityTimeFrom(e.target.value); }}
-          />
-          <label className="field-label" style={{ marginBottom: 0 }}>To</label>
-          <input
-            type="time"
-            className="field-input"
-            style={{ width: "auto" }}
-            value={availabilityTimeTo}
-            onChange={function (e) { setAvailabilityTimeTo(e.target.value); }}
-          />
-        </div>
-        <button type="button" className="primary-button" onClick={saveAvailability}>
-          Save availability
-        </button>
-        {availabilitySaveMessage && (
-          <p className="form-message" style={{ marginTop: 8 }}>{availabilitySaveMessage}</p>
-        )}
-      </section>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
+              <label className="field-label" style={{ marginBottom: 0 }}>From</label>
+              <input
+                type="time"
+                className="field-input"
+                style={{ width: "auto" }}
+                value={availabilityTimeFrom}
+                onChange={function (e) { setAvailabilityTimeFrom(e.target.value); }}
+              />
+              <label className="field-label" style={{ marginBottom: 0 }}>To</label>
+              <input
+                type="time"
+                className="field-input"
+                style={{ width: "auto" }}
+                value={availabilityTimeTo}
+                onChange={function (e) { setAvailabilityTimeTo(e.target.value); }}
+              />
+            </div>
+            <button type="button" className="primary-button" onClick={saveAvailability}>
+              Save availability
+            </button>
+            {availabilitySaveMessage && (
+              <p className="form-message" style={{ marginTop: 8 }}>{availabilitySaveMessage}</p>
+            )}
+          </section>
+        </>
+      )}
 
       <section className="info-block">
         <h3>Daily Coverage - This Week</h3>

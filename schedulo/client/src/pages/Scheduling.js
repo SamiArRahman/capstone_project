@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
-import { parseYmdLocal, formatYmdLocal, addDaysYmdLocal, getWeekMondayYmdToday } from "../utils/calendar";
 
 var WEEK_DAYS = [
   { day: "Mon", date: "Nov 17" },
@@ -12,46 +11,50 @@ var WEEK_DAYS = [
   { day: "Sun", date: "Nov 23" }
 ];
 
-var EMPLOYEE_SHIFT_TONES = ["blue", "green", "red", "amber", "violet", "teal", "orange", "indigo"];
-
-function employeeNameToTone(name) {
-  var key = String(name || "").trim().toLowerCase();
-  if (!key) return "blue";
-  var h = 0;
-  for (var c = 0; c < key.length; c++) {
-    h = ((h << 5) - h + key.charCodeAt(c)) | 0;
-  }
-  var idx = Math.abs(h) % EMPLOYEE_SHIFT_TONES.length;
-  return EMPLOYEE_SHIFT_TONES[idx];
-}
-
-function shiftPersonKey(name) {
-  return String(name || "").trim().toLowerCase();
+function getWeekMondayStr() {
+  var d = new Date();
+  var day = d.getDay();
+  var diff = d.getDate() - (day === 0 ? 6 : day - 1);
+  var monday = new Date(d);
+  monday.setDate(diff);
+  var y = monday.getFullYear();
+  var m = String(monday.getMonth() + 1);
+  if (m.length === 1) m = "0" + m;
+  var date = String(monday.getDate());
+  if (date.length === 1) date = "0" + date;
+  return y + "-" + m + "-" + date;
 }
 
 function Scheduling({ user }) {
   var isManager = user && user.role === "manager";
-  var defaultEnd = addDaysYmdLocal(getWeekMondayYmdToday(), 6) || "";
+  var defaultEnd = (function () {
+    var s = getWeekMondayStr();
+    var d = new Date(s);
+    d.setDate(d.getDate() + 6);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1);
+    if (m.length === 1) m = "0" + m;
+    var day = String(d.getDate());
+    if (day.length === 1) day = "0" + day;
+    return y + "-" + m + "-" + day;
+  })();
   const [employee, setEmployee] = useState("");
   const [employees, setEmployees] = useState([]);
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [startDate, setStartDate] = useState(getWeekMondayYmdToday());
+  const [startDate, setStartDate] = useState(getWeekMondayStr());
   const [endDate, setEndDate] = useState(defaultEnd);
   const [weekShifts, setWeekShifts] = useState([]);
   const [addShiftDate, setAddShiftDate] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState("");
   const [clearMessage, setClearMessage] = useState("");
-  var loadWeekSeqRef = useRef(0);
 
   function loadWeekShifts(weekStart) {
     if (!weekStart) return;
-    var seq = ++loadWeekSeqRef.current;
     apiFetch("/shifts?weekStart=" + encodeURIComponent(weekStart))
       .then(function (data) {
-        if (seq !== loadWeekSeqRef.current) return;
         if (Array.isArray(data)) {
           setWeekShifts(data);
         } else {
@@ -59,13 +62,19 @@ function Scheduling({ user }) {
         }
       })
       .catch(function () {
-        if (seq !== loadWeekSeqRef.current) return;
         setWeekShifts([]);
       });
   }
 
   function getEndDateFromStart(start) {
-    return addDaysYmdLocal(start, 6) || start;
+    var d = new Date(start);
+    d.setDate(d.getDate() + 6);
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1);
+    if (m.length === 1) m = "0" + m;
+    var day = String(d.getDate());
+    if (day.length === 1) day = "0" + day;
+    return y + "-" + m + "-" + day;
   }
 
   function handleStartDateChange(e) {
@@ -101,11 +110,7 @@ function Scheduling({ user }) {
       })
     })
       .then(function (data) {
-        if (data && data.error) {
-          setGenerateMessage(data.error);
-          return;
-        }
-        setGenerateMessage("Schedule cleared and filled: " + (data.created || 0) + " shifts added.");
+        setGenerateMessage("Schedule cleared and filled: " + data.created + " shifts added.");
         loadWeekShifts(startDate);
       })
       .catch(function (requestError) {
@@ -173,13 +178,18 @@ function Scheduling({ user }) {
   function getCalendarWeekDays() {
     var days = [];
     var dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    var current = parseYmdLocal(startDate);
-    var end = parseYmdLocal(endDate);
+    var current = new Date(startDate);
+    var end = new Date(endDate);
     if (Number.isNaN(current.getTime()) || Number.isNaN(end.getTime())) {
       return WEEK_DAYS;
     }
     while (current <= end && days.length < 7) {
-      var dateStr = formatYmdLocal(current);
+      var y = current.getFullYear();
+      var m = String(current.getMonth() + 1);
+      if (m.length === 1) m = "0" + m;
+      var d = String(current.getDate());
+      if (d.length === 1) d = "0" + d;
+      var dateStr = y + "-" + m + "-" + d;
       var monthShort = current.toLocaleDateString("en-US", { month: "short" });
       var dayNum = current.getDate();
       var dayLabel = monthShort + " " + dayNum;
@@ -193,47 +203,19 @@ function Scheduling({ user }) {
   var calendarDays = getCalendarWeekDays();
 
   function getShiftsForDay(dateStr) {
-    var groups = {};
+    var result = [];
     for (var i = 0; i < weekShifts.length; i++) {
-      var s = weekShifts[i];
-      if (s.date !== dateStr) continue;
-      var raw = s.employee;
-      var key = shiftPersonKey(raw) || "anon-" + (s.id != null ? s.id : i);
-      if (!groups[key]) {
-        groups[key] = {
-          employee: String(raw || "").trim() || raw,
-          times: [],
-          timeSeen: {},
-          role: String(s.role || "Team Member").trim() || "Team Member",
-          tone: employeeNameToTone(raw),
-          ids: []
-        };
-      }
-      var g = groups[key];
-      var trimmed = String(raw || "").trim();
-      if (trimmed.length > String(g.employee).length) {
-        g.employee = trimmed;
-      }
-      if (s.role && String(s.role).trim()) {
-        g.role = String(s.role).trim();
-      }
-      var tm = String(s.time || "").trim();
-      if (tm && !g.timeSeen[tm]) {
-        g.timeSeen[tm] = true;
-        g.times.push(tm);
-      }
-      if (s.id != null) {
-        g.ids.push(s.id);
+      if (weekShifts[i].date === dateStr) {
+        var tone = i % 3 === 0 ? "blue" : i % 3 === 1 ? "green" : "red";
+        result.push({
+          employee: weekShifts[i].employee,
+          time: weekShifts[i].time,
+          role: weekShifts[i].role || "Team Member",
+          tone: tone
+        });
       }
     }
-    return Object.values(groups)
-      .map(function (g) {
-        g.times.sort();
-        return g;
-      })
-      .sort(function (a, b) {
-        return String(a.employee).localeCompare(String(b.employee));
-      });
+    return result;
   }
 
   return (
@@ -308,7 +290,7 @@ function Scheduling({ user }) {
             </button>
           </div>
           <p className="form-message" style={{ marginTop: 8, fontSize: 12, color: "#526281" }}>
-            Weekdays: only days marked in My availability (Dashboard). Weekends: any team member can be scheduled.
+            Shifts can only be assigned on days the employee has set in My Availability (Dashboard).
           </p>
           {message && <p className="form-message">{message}</p>}
         </section>
@@ -317,7 +299,7 @@ function Scheduling({ user }) {
         <section className="info-block" style={{ marginBottom: 16 }}>
           <h3>Fill schedule from availability</h3>
           <p className="form-message" style={{ marginBottom: 8 }}>
-            Weekdays follow availability. If a weekend day has no one marked, the scheduler considers the full team.
+            Clear all shifts, then use Auto scheduled to fill based on each employee&apos;s availability (Dashboard).
           </p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button
@@ -333,13 +315,13 @@ function Scheduling({ user }) {
               onClick={handleCleanAndFill}
               disabled={generating}
             >
-              {generating ? "Generating…" : "Auto scheduled"}
+              {generating ? "Generating..." : "Auto scheduled"}
             </button>
             {clearMessage && (
               <span className="form-message">{clearMessage}</span>
             )}
             {generateMessage && (
-              <span className={/\bfail/i.test(generateMessage) ? "form-message error-text" : "form-message"}>
+              <span className={generateMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"}>
                 {generateMessage}
               </span>
             )}
@@ -348,8 +330,7 @@ function Scheduling({ user }) {
       )}
       <section className="calendar-shell">
         <p className="form-message" style={{ marginBottom: 8 }}>
-          Week: {startDate} to {endDate}.
-          {isManager ? " Add shifts above or use Auto scheduled." : " View this week’s schedule."}
+          Week: {startDate} to {endDate}.{isManager ? " Add shifts above or clean & fill from availability." : " View the schedule for this week."}
         </p>
         <div className="date-input-wrap" style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
           <label className="field-label" style={{ marginBottom: 0 }}>Week</label>
@@ -374,26 +355,12 @@ function Scheduling({ user }) {
                   {dayShifts.length === 0 && <p className="schedule-empty">No shifts</p>}
                   {dayShifts.length > 0 && (
                     <div className="shift-card-stack">
-                      {dayShifts.map(function (shift) {
+                      {dayShifts.map(function (shift, index) {
                         var cardClass = "shift-card shift-card-" + shift.tone;
-                        var cardKey =
-                          day.dateStr +
-                          "-" +
-                          shiftPersonKey(shift.employee) +
-                          "-" +
-                          (shift.ids && shift.ids.length ? shift.ids.join("-") : "0");
                         return (
-                          <article key={cardKey} className={cardClass}>
+                          <article key={shift.employee + "-" + shift.time + "-" + index} className={cardClass}>
                             <p className="shift-card-name">{shift.employee}</p>
-                            <div className="shift-card-time-block">
-                              {shift.times.map(function (t, ti) {
-                                return (
-                                  <p key={"t-" + ti} className="shift-card-time">
-                                    {t}
-                                  </p>
-                                );
-                              })}
-                            </div>
+                            <p className="shift-card-time">{shift.time}</p>
                             <p className="shift-card-role">{shift.role}</p>
                           </article>
                         );
