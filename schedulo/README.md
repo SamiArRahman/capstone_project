@@ -1,54 +1,92 @@
 # Schedulo
 
-Schedulo now has a persisted backend for Vercel deployment:
+Schedulo is a full-stack employee scheduling application built for workplace scheduling and staff management.
 
-- MongoDB-backed employee, manager, shift, availability, PTO, swap request, and audit data
-- Hashed passwords with JWT-based auth
-- Manager-only protection for employee management and scheduling actions
-- Vercel API entrypoints under `/api`
-- CRA frontend configured to use the same `/api` routes in production and a local proxy in development
+The project includes:
+
+- a React frontend for managers and employees
+- a Node.js and Express backend
+- MongoDB persistence through Mongoose
+- JWT-based authentication with hashed passwords
+
+Employee accounts, manager accounts, schedules, availability, PTO requests, shift swap requests, and related app data are stored in MongoDB.
 
 ## Environment Variables
 
-Copy `.env.example` to `server/.env` for local development, then fill in:
+Create [server/.env](/capstone_project/schedulo/server/.env) and add:
 
-- `MONGO_URI`
-- `JWT_SECRET`
-
-You can also override the seed credentials with the `SEED_*` variables.
-
-## Local Development
-
-From the `schedulo` folder:
-
-```bash
-npm install
-npm run dev
+```env
+MONGO_URI=your-mongodb-connection-string
+JWT_SECRET=your-secret-key
 ```
 
-That starts:
+Optional seed overrides:
 
-- the backend on `http://localhost:4000`
-- the React app on `http://localhost:3000`
+```env
+SEED_MANAGER_USERNAME=manager
+SEED_MANAGER_PASSWORD=Manager1234!
+SEED_MANAGER_NAME=Store Manager
+SEED_EMPLOYEE_USERNAME=employee
+SEED_EMPLOYEE_PASSWORD=Employee1234!
+SEED_EMPLOYEE_NAME=Sample Employee
+```
+
+
+
+## Running Locally
+
+This project uses MongoDB for persistent storage. Even when running locally, the app is still using the real backend and database through `MONGO_URI`.
+
+From [schedulo](/capstone_project/schedulo):
+
+
+Terminal 1:
+
+```powershell
+cd c:\Users\sami\Documents\capstone\capstone_project\schedulo
+npm --workspace server run dev
+```
+
+Terminal 2:
+
+```powershell
+cd c:\Users\sami\Documents\capstone\capstone_project\schedulo
+npm --workspace client start
+```
+
+## Demo Accounts
+
+For local demonstration, the backend can seed default accounts if they do not already exist in the database.
+
+Example demo logins:
+
+- Manager: `manager / Manager1234!`
+- Employee: `employee / Employee1234!`
+
+These are demo credentials for testing the application locally. They are not meant to replace the real database-backed authentication system.
+
+## Backend and Database Notes
+
+This application is not using only hardcoded local login logic.
+
+The backend connects to MongoDB using `MONGO_URI`, and MongoDB is used to persist:
+
+- manager and employee accounts
+- login credentials
+- employee availability
+- generated and manual schedules
+- PTO requests
+- shift swap requests
+- other employee scheduling data needed for the app to function
+
+The seeded demo accounts are simply a convenient way to test the app after connecting the backend to MongoDB.
 
 ## Vercel
 
-Set these project environment variables in Vercel:
+For deployment, configure the Vercel project with:
 
+- `Root Directory = schedulo`
 - `MONGO_URI`
 - `JWT_SECRET`
-- optional `SEED_MANAGER_*` and `SEED_EMPLOYEE_*`
 
-Vercel will:
-
-- build the React app into `client/build`
-- serve the backend from the `api/` directory
-
-## Seed Accounts
-
-If the database is empty, the backend seeds:
-
-- `manager / Manager1234!`
-- `employee / Employee1234!`
-
-Change these via env vars before production if you do not want the defaults.
+Vercel will use the frontend build output and the API files in [api](capstone_project/schedulo/api).
