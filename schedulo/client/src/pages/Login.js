@@ -65,7 +65,7 @@ function Login({ onAuthenticated }) {
           <label className="field-label">Password</label>
           <input
             className="field-input"
-            placeholder="1234"
+            placeholder="Manager1234!"
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}

@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
-
-const DEFAULT_SUNDAY_SHIFTS = [
-  { employee: "Sami", time: "09:00 - 17:00" },
-  { employee: "Krishna", time: "11:00 - 19:00" },
-  { employee: "Tigran", time: "10:00 - 18:00" }
-];
+import { getWeekMondayYmdFromAny } from "../utils/calendar";
 
 function parseShiftHours(timeStr) {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -50,23 +45,18 @@ function downloadCsvFile(filename, csvString) {
   URL.revokeObjectURL(url);
 }
 
-function getWeekKey(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d);
-  monday.setDate(diff);
-  return monday.toISOString().slice(0, 10);
-}
-
 function buildWeeklyRequestData(ptoRequests, swapRequests, numWeeks = 8) {
   const now = new Date();
   const weeks = [];
   for (let i = numWeeks - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - 7 * i);
-    const key = getWeekKey(d);
-    const weekStart = new Date(key);
+    const key = getWeekMondayYmdFromAny(d);
+    const weekStart = new Date(
+      Number(key.slice(0, 4)),
+      Number(key.slice(5, 7)) - 1,
+      Number(key.slice(8, 10))
+    );
     weeks.push({
       key,
       label: weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -77,11 +67,11 @@ function buildWeeklyRequestData(ptoRequests, swapRequests, numWeeks = 8) {
   const byWeek = {};
   weeks.forEach((w) => { byWeek[w.key] = w; });
   ptoRequests.forEach((r) => {
-    const key = getWeekKey(r.requestedAt || r.startDate);
+    const key = getWeekMondayYmdFromAny(r.requestedAt || r.startDate);
     if (byWeek[key]) byWeek[key].pto += 1;
   });
   swapRequests.forEach((r) => {
-    const key = getWeekKey(r.requestedAt);
+    const key = getWeekMondayYmdFromAny(r.requestedAt);
     if (byWeek[key]) byWeek[key].swaps += 1;
   });
   return weeks;
@@ -124,7 +114,6 @@ function Analytics() {
     employeeSet.add(r.fromEmployee);
     employeeSet.add(r.toEmployee);
   });
-  DEFAULT_SUNDAY_SHIFTS.forEach((s) => employeeSet.add(s.employee));
   const employeeList = Array.from(employeeSet).sort();
 
   const ptoShiftData = employeeList.map((employee) => {
@@ -221,14 +210,6 @@ function Analytics() {
     const h = parseShiftHours(s.time);
     if (!hoursByEmployeeMap[s.employee]) hoursByEmployeeMap[s.employee] = 0;
     hoursByEmployeeMap[s.employee] += h;
-  });
-  const apiEmployeeNames = new Set(shifts.map((s) => s.employee));
-  DEFAULT_SUNDAY_SHIFTS.forEach((defaultShift) => {
-    if (!apiEmployeeNames.has(defaultShift.employee)) {
-      const h = parseShiftHours(defaultShift.time);
-      if (!hoursByEmployeeMap[defaultShift.employee]) hoursByEmployeeMap[defaultShift.employee] = 0;
-      hoursByEmployeeMap[defaultShift.employee] += h;
-    }
   });
   const hoursByEmployee = employeeList.map((employee) => {
     const total = hoursByEmployeeMap[employee] ?? 0;

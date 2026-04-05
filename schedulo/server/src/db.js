@@ -137,7 +137,7 @@ const shiftSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-shiftSchema.index({ employee: 1, date: 1 }, { unique: true });
+shiftSchema.index({ employee: 1, date: 1, startTime: 1, endTime: 1 }, { unique: true });
 
 const ptoRequestSchema = new mongoose.Schema(
   {
@@ -231,6 +231,21 @@ const swapRequestSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const scheduleNotificationSchema = new mongoose.Schema(
+  {
+    message: { type: String, required: true, trim: true }
+  },
+  { timestamps: true }
+);
+
+const notificationAckSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    lastReadAt: { type: Date, default: null }
+  },
+  { timestamps: true }
+);
+
 const auditLogSchema = new mongoose.Schema(
   {
     actor: {
@@ -272,6 +287,10 @@ const Shift = mongoose.models.Shift || mongoose.model("Shift", shiftSchema);
 const PtoRequest = mongoose.models.PtoRequest || mongoose.model("PtoRequest", ptoRequestSchema);
 const SwapRequest = mongoose.models.SwapRequest || mongoose.model("SwapRequest", swapRequestSchema);
 const AuditLog = mongoose.models.AuditLog || mongoose.model("AuditLog", auditLogSchema);
+const ScheduleNotification =
+  mongoose.models.ScheduleNotification || mongoose.model("ScheduleNotification", scheduleNotificationSchema);
+const NotificationAck =
+  mongoose.models.NotificationAck || mongoose.model("NotificationAck", notificationAckSchema);
 
 async function ensureSeedUser(seedConfig, role, maxHoursPerWeek, skills) {
   const existing = await User.findOne({ username: seedConfig.username });
@@ -346,7 +365,9 @@ async function connectToDatabase() {
 module.exports = {
   AuditLog,
   Availability,
+  NotificationAck,
   PtoRequest,
+  ScheduleNotification,
   Shift,
   SwapRequest,
   User,
