@@ -1,0 +1,17 @@
+{
+  "name": "schedulo",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "build": "npm --workspace client run build",
+    "dev": "concurrently \"npm --workspace server run dev\" \"npm --workspace client start\"",
+    "start": "npm --workspace server run start",
+    "test": "npm --workspace client test -- --watch=false"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
+}

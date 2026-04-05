@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-const API_BASE = "http://localhost:4000/api";
+import { apiFetch } from "../lib/api";
 
 const formatDate = value => {
   if (!value) {
@@ -44,6 +43,7 @@ function Requests({ user }) {
   const [activeRequestView, setActiveRequestView] = useState("pto");
   const [ptoRequests, setPtoRequests] = useState([]);
   const [swapRequests, setSwapRequests] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPtoForm, setShowPtoForm] = useState(false);
@@ -51,6 +51,7 @@ function Requests({ user }) {
   const [submitting, setSubmitting] = useState(false);
 
   const [ptoForm, setPtoForm] = useState({
+    employeeId: user?.id || "",
     employee: user?.name || user?.username || "",
     startDate: "",
     endDate: "",
@@ -58,7 +59,9 @@ function Requests({ user }) {
   });
 
   const [swapForm, setSwapForm] = useState({
+    fromEmployeeId: user?.id || "",
     fromEmployee: user?.name || user?.username || "",
+    toEmployeeId: "",
     toEmployee: "",
     date: "",
     role: "Server",
@@ -73,20 +76,10 @@ function Requests({ user }) {
       setLoading(true);
       setError("");
 
-      const [ptoResponse, swapResponse] = await Promise.all([
-        fetch(`${API_BASE}/requests/pto?status=pending`),
-        fetch(`${API_BASE}/requests/swaps?status=pending`)
+      const [ptoData, swapData] = await Promise.all([
+        apiFetch("/requests/pto?status=pending"),
+        apiFetch("/requests/swaps?status=pending")
       ]);
-
-      const [ptoData, swapData] = await Promise.all([ptoResponse.json(), swapResponse.json()]);
-
-      if (!ptoResponse.ok) {
-        throw new Error(ptoData.error || "Failed loading PTO requests");
-      }
-
-      if (!swapResponse.ok) {
-        throw new Error(swapData.error || "Failed loading swap requests");
-      }
 
       setPtoRequests(Array.isArray(ptoData) ? ptoData : []);
       setSwapRequests(Array.isArray(swapData) ? swapData : []);
@@ -97,12 +90,22 @@ function Requests({ user }) {
     }
   };
 
+  const loadEmployees = async () => {
+    try {
+      const data = await apiFetch("/employees");
+      setEmployees(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setEmployees([]);
+    }
+  };
+
   useEffect(() => {
     loadPendingRequests();
+    loadEmployees();
   }, []);
 
   const submitPtoRequest = async () => {
-    if (!ptoForm.employee.trim() || !ptoForm.startDate || !ptoForm.endDate || !ptoForm.reason.trim()) {
+    if (!ptoForm.startDate || !ptoForm.endDate || !ptoForm.reason.trim()) {
       setError("Fill employee, date range, and reason before submitting.");
       return;
     }
@@ -111,25 +114,20 @@ function Requests({ user }) {
       setSubmitting(true);
       setError("");
 
-      const response = await fetch(`${API_BASE}/requests/pto`, {
+      await apiFetch("/requests/pto", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employee: ptoForm.employee.trim(),
+          employeeId: isManager ? ptoForm.employeeId : user?.id,
+          employee: isManager ? ptoForm.employee : user?.name || user?.username || "",
           startDate: ptoForm.startDate,
           endDate: ptoForm.endDate,
           reason: ptoForm.reason.trim()
         })
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create PTO request");
-      }
-
       setShowPtoForm(false);
       setPtoForm({
+        employeeId: user?.id || "",
         employee: user?.name || user?.username || "",
         startDate: "",
         endDate: "",
@@ -145,8 +143,7 @@ function Requests({ user }) {
 
   const submitSwapRequest = async () => {
     if (
-      !swapForm.fromEmployee.trim() ||
-      !swapForm.toEmployee.trim() ||
+      !swapForm.toEmployeeId ||
       !swapForm.date ||
       !swapForm.role.trim() ||
       !swapForm.time.trim() ||
@@ -160,12 +157,13 @@ function Requests({ user }) {
       setSubmitting(true);
       setError("");
 
-      const response = await fetch(`${API_BASE}/requests/swaps`, {
+      await apiFetch("/requests/swaps", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fromEmployee: swapForm.fromEmployee.trim(),
-          toEmployee: swapForm.toEmployee.trim(),
+          fromEmployeeId: isManager ? swapForm.fromEmployeeId : user?.id,
+          fromEmployee: isManager ? swapForm.fromEmployee : user?.name || user?.username || "",
+          toEmployeeId: swapForm.toEmployeeId,
+          toEmployee: swapForm.toEmployee,
           date: swapForm.date,
           role: swapForm.role.trim(),
           time: swapForm.time.trim(),
@@ -173,15 +171,11 @@ function Requests({ user }) {
         })
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create shift swap request");
-      }
-
       setShowSwapForm(false);
       setSwapForm({
+        fromEmployeeId: user?.id || "",
         fromEmployee: user?.name || user?.username || "",
+        toEmployeeId: "",
         toEmployee: "",
         date: "",
         role: "Server",
@@ -199,18 +193,10 @@ function Requests({ user }) {
   const updatePtoStatus = async (id, status) => {
     try {
       setError("");
-      const response = await fetch(`${API_BASE}/requests/pto/${id}/status`, {
+      await apiFetch(`/requests/pto/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed updating PTO request");
-      }
-
       await loadPendingRequests();
     } catch (updateError) {
       setError(updateError.message || "Failed updating PTO request");
@@ -220,18 +206,10 @@ function Requests({ user }) {
   const updateSwapStatus = async (id, status) => {
     try {
       setError("");
-      const response = await fetch(`${API_BASE}/requests/swaps/${id}/status`, {
+      await apiFetch(`/requests/swaps/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed updating shift swap request");
-      }
-
       await loadPendingRequests();
     } catch (updateError) {
       setError(updateError.message || "Failed updating shift swap request");
@@ -256,12 +234,29 @@ function Requests({ user }) {
           <h3>Create PTO Request</h3>
 
           <div className="request-form-grid">
-            <input
-              className="field-input"
-              placeholder="Employee"
-              value={ptoForm.employee}
-              onChange={event => setPtoForm({ ...ptoForm, employee: event.target.value })}
-            />
+            {isManager ? (
+              <select
+                className="field-input"
+                value={ptoForm.employeeId}
+                onChange={event => {
+                  const selected = employees.find(entry => entry.id === event.target.value);
+                  setPtoForm({
+                    ...ptoForm,
+                    employeeId: event.target.value,
+                    employee: selected ? (selected.name || selected.username) : ""
+                  });
+                }}
+              >
+                <option value="">Select employee</option>
+                {employees.map(entry => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name || entry.username}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input className="field-input" value={ptoForm.employee} readOnly />
+            )}
 
             <input
               className="field-input"
@@ -346,19 +341,51 @@ function Requests({ user }) {
           <h3>Create Shift Swap Request</h3>
 
           <div className="request-form-grid">
-            <input
-              className="field-input"
-              placeholder="From Employee"
-              value={swapForm.fromEmployee}
-              onChange={event => setSwapForm({ ...swapForm, fromEmployee: event.target.value })}
-            />
+            {isManager ? (
+              <select
+                className="field-input"
+                value={swapForm.fromEmployeeId}
+                onChange={event => {
+                  const selected = employees.find(entry => entry.id === event.target.value);
+                  setSwapForm({
+                    ...swapForm,
+                    fromEmployeeId: event.target.value,
+                    fromEmployee: selected ? (selected.name || selected.username) : ""
+                  });
+                }}
+              >
+                <option value="">From employee</option>
+                {employees.map(entry => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name || entry.username}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input className="field-input" value={swapForm.fromEmployee} readOnly />
+            )}
 
-            <input
+            <select
               className="field-input"
-              placeholder="To Employee"
-              value={swapForm.toEmployee}
-              onChange={event => setSwapForm({ ...swapForm, toEmployee: event.target.value })}
-            />
+              value={swapForm.toEmployeeId}
+              onChange={event => {
+                const selected = employees.find(entry => entry.id === event.target.value);
+                setSwapForm({
+                  ...swapForm,
+                  toEmployeeId: event.target.value,
+                  toEmployee: selected ? (selected.name || selected.username) : ""
+                });
+              }}
+            >
+              <option value="">To employee</option>
+              {employees
+                .filter(entry => entry.id !== (isManager ? swapForm.fromEmployeeId : user?.id))
+                .map(entry => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name || entry.username}
+                  </option>
+                ))}
+            </select>
 
             <input
               className="field-input"

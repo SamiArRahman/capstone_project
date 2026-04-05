@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-var API_BASE = "http://localhost:4000/api";
+import { apiFetch } from "../lib/api";
 
 function Employees({ user }) {
   var isManager = user && user.role === "manager";
@@ -28,8 +27,7 @@ function Employees({ user }) {
   function loadEmployees() {
     setLoading(true);
     setError("");
-    fetch(API_BASE + "/employees")
-      .then(function (response) { return response.json(); })
+    apiFetch("/employees")
       .then(function (data) {
         if (Array.isArray(data)) setEmployees(data);
         else setEmployees([]);
@@ -39,8 +37,7 @@ function Employees({ user }) {
   }
 
   function loadAvailabilityAll() {
-    fetch(API_BASE + "/availability/all")
-      .then(function (r) { return r.json(); })
+    apiFetch("/availability/all")
       .then(function (data) {
         setAvailabilityAll(Array.isArray(data) ? data : []);
       });
@@ -85,28 +82,24 @@ function Employees({ user }) {
     if (editPassword.trim() !== "") body.password = editPassword;
     var skillsStr = editSkills.trim();
     if (skillsStr) body.skills = skillsStr.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-    fetch(API_BASE + "/employees/" + editingId, {
+    apiFetch("/employees/" + editingId, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     })
-      .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.error) setMessage(data.error);
-        else { handleCancelEdit(); loadEmployees(); }
+        if (data && data.id) {
+          handleCancelEdit();
+          loadEmployees();
+        }
       })
-      .catch(function () { setMessage("Failed to save"); });
+      .catch(function (requestError) { setMessage(requestError.message || "Failed to save"); });
   }
 
   function handleDeleteClick(employee) {
     if (window.confirm("Delete " + (employee.name || employee.username) + "? This will also remove their shifts.") === false) return;
-    fetch(API_BASE + "/employees/" + employee.id, { method: "DELETE" })
-      .then(function (r) {
-        if (r.ok) loadEmployees();
-        else return r.json();
-      })
-      .then(function (data) { if (data && data.error) setError(data.error); })
-      .catch(function () { setError("Failed to delete"); });
+    apiFetch("/employees/" + employee.id, { method: "DELETE" })
+      .then(function () { loadEmployees(); })
+      .catch(function (requestError) { setError(requestError.message || "Failed to delete"); });
   }
 
   function handleAddClick() {
@@ -130,8 +123,8 @@ function Employees({ user }) {
       setMessage("Username must be at least 3 characters.");
       return;
     }
-    if (addPassword.length < 4) {
-      setMessage("Password must be at least 4 characters.");
+    if (addPassword.length < 8) {
+      setMessage("Password must be at least 8 characters.");
       return;
     }
     var nameToSend = addName.trim() || addUsername.trim();
@@ -144,21 +137,18 @@ function Employees({ user }) {
     };
     var skillsStr = addSkills.trim();
     if (skillsStr) payload.skills = skillsStr.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-    fetch(API_BASE + "/register", {
+    apiFetch("/employees", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     })
-      .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.error) setMessage(data.error);
-        else {
+        if (data && data.id) {
           setShowAddForm(false);
           loadEmployees();
           loadAvailabilityAll();
         }
       })
-      .catch(function () { setMessage("Failed to add employee"); });
+      .catch(function (requestError) { setMessage(requestError.message || "Failed to add employee"); });
   }
 
   function handleAddCancel() {
@@ -220,7 +210,7 @@ function Employees({ user }) {
             </div>
             <div>
               <label className="field-label">Password</label>
-              <input className="field-input" type="password" placeholder="Min 4 characters" value={addPassword} onChange={function (e) { setAddPassword(e.target.value); }} />
+              <input className="field-input" type="password" placeholder="Min 8 characters" value={addPassword} onChange={function (e) { setAddPassword(e.target.value); }} />
             </div>
             <div>
               <label className="field-label">Max hours/week</label>

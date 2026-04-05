@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-const API_BASE = "http://localhost:4000/api";
+import { apiFetch } from "../lib/api";
 
 function getWeekMondayStr() {
   var d = new Date();
@@ -54,9 +53,9 @@ function Dashboard({ user }) {
     var mounted = true;
 
     Promise.all([
-      fetch(API_BASE + "/employees").then(function (r) { return r.json(); }),
-      fetch(API_BASE + "/shifts?weekStart=" + encodeURIComponent(weekStart)).then(function (r) { return r.json(); }),
-      fetch(API_BASE + "/requests/summary").then(function (r) { return r.json(); })
+      apiFetch("/employees"),
+      apiFetch("/shifts?weekStart=" + encodeURIComponent(weekStart)),
+      apiFetch("/requests/summary")
     ]).then(function (results) {
       if (!mounted) return;
       var empList = Array.isArray(results[0]) ? results[0] : [];
@@ -79,8 +78,7 @@ function Dashboard({ user }) {
   useEffect(function () {
     if (!user || !user.id || user.role === "manager") return;
     var mounted = true;
-    fetch(API_BASE + "/availability?userId=" + encodeURIComponent(user.id))
-      .then(function (r) { return r.json(); })
+    apiFetch("/availability?userId=" + encodeURIComponent(user.id))
       .then(function (data) {
         if (!mounted) return;
         if (data.days && Array.isArray(data.days)) setAvailabilityDays(data.days);
@@ -88,7 +86,7 @@ function Dashboard({ user }) {
         if (data.timeTo) setAvailabilityTimeTo(data.timeTo);
       });
     return function () { mounted = false; };
-  }, [user && user.id, user && user.role]);
+  }, [user]);
 
   function toggleAvailabilityDay(day) {
     setAvailabilityDays(function (prev) {
@@ -100,9 +98,8 @@ function Dashboard({ user }) {
   function saveAvailability() {
     if (!user || !user.id) return;
     setAvailabilitySaveMessage("");
-    fetch(API_BASE + "/availability", {
+    apiFetch("/availability", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         userId: user.id,
         days: availabilityDays,
@@ -110,7 +107,6 @@ function Dashboard({ user }) {
         timeTo: availabilityTimeTo
       })
     })
-      .then(function (r) { return r.json(); })
       .then(function () {
         setAvailabilitySaveMessage("Availability saved.");
       })
@@ -170,7 +166,7 @@ function Dashboard({ user }) {
       <div className="dashboard-page">
         <header className="page-heading">
           <h2>{user.role === "manager" ? "Manager Dashboard" : "Employee Dashboard"}</h2>
-          <p>Loading…</p>
+          <p>Loading...</p>
         </header>
       </div>
     );
@@ -236,7 +232,7 @@ function Dashboard({ user }) {
             ) : (
               <>
                 <p className="form-message" style={{ marginBottom: 8 }}>
-                  {myShifts.length} shift(s) – {myHours.toFixed(1)} hours total
+                  {myShifts.length} shift(s) - {myHours.toFixed(1)} hours total
                 </p>
                 <div className="coverage-list">
                   {myShifts.map(function (s) {
@@ -244,7 +240,7 @@ function Dashboard({ user }) {
                     return (
                       <div key={(s.date || "") + "-" + s.employee + "-" + (s.time || "")} className="coverage-row">
                         <span>{dayLabel}</span>
-                        <span>{s.time || "—"}</span>
+                        <span>{s.time || "-"}</span>
                       </div>
                     );
                   })}

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-const API_BASE = "http://localhost:4000/api";
+import { apiFetch } from "../lib/api";
 
 const DEFAULT_SUNDAY_SHIFTS = [
   { employee: "Sami", time: "09:00 - 17:00" },
@@ -101,15 +100,10 @@ function Analytics() {
       try {
         setLoading(true);
         setError("");
-        const [shiftsRes, ptoRes, swapRes] = await Promise.all([
-          fetch(`${API_BASE}/shifts`),
-          fetch(`${API_BASE}/requests/pto`),
-          fetch(`${API_BASE}/requests/swaps`)
-        ]);
         const [shiftsData, ptoData, swapData] = await Promise.all([
-          shiftsRes.json(),
-          ptoRes.json(),
-          swapRes.json()
+          apiFetch("/shifts"),
+          apiFetch("/requests/pto"),
+          apiFetch("/requests/swaps")
         ]);
         setShifts(Array.isArray(shiftsData) ? shiftsData : []);
         setPtoRequests(Array.isArray(ptoData) ? ptoData : []);

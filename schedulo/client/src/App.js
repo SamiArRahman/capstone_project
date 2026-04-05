@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import "./App.css";
@@ -10,16 +10,62 @@ import Requests from "./pages/Requests";
 import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import { apiFetch, clearSession, loadStoredSession, storeSession } from "./lib/api";
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [session, setSession] = useState(loadStoredSession());
+  const user = session ? session.user : null;
+  const sessionToken = session ? session.token : "";
+
+  function handleAuthenticated(nextSession) {
+    storeSession(nextSession);
+    setSession(nextSession);
+  }
+
+  function handleLogout() {
+    clearSession();
+    setSession(null);
+  }
+
+  useEffect(() => {
+    if (!sessionToken) {
+      return;
+    }
+
+    let mounted = true;
+    apiFetch("/me", {
+      headers: {
+        Authorization: `Bearer ${sessionToken}`
+      }
+    })
+      .then((freshUser) => {
+        if (!mounted) {
+          return;
+        }
+        const nextSession = {
+          token: sessionToken,
+          user: freshUser
+        };
+        storeSession(nextSession);
+        setSession(nextSession);
+      })
+      .catch(() => {
+        if (mounted) {
+          handleLogout();
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [sessionToken]);
 
   if (!user) {
     return (
       <BrowserRouter>
         <Routes>
-          <Route path="/signup" element={<Signup setUser={setUser} />} />
-          <Route path="/login" element={<Login setUser={setUser} />} />
+          <Route path="/signup" element={<Signup onAuthenticated={handleAuthenticated} />} />
+          <Route path="/login" element={<Login onAuthenticated={handleAuthenticated} />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
@@ -40,7 +86,7 @@ function App() {
           <div className="profile-area">
             <span className="view-pill">{managerView ? "Manager View" : "Employee View"}</span>
             <span className="profile-name">{user.name || user.username}</span>
-            <button className="ghost-button" onClick={() => setUser(null)}>
+            <button className="ghost-button" onClick={handleLogout}>
               Logout
             </button>
           </div>

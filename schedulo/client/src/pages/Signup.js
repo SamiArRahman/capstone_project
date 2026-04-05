@@ -1,9 +1,8 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 
-const API_BASE = "http://localhost:4000/api";
-
-function Signup({ setUser }) {
+function Signup({ onAuthenticated }) {
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -32,8 +31,8 @@ function Signup({ setUser }) {
       setError("Password is required.");
       return false;
     }
-    if (p.length < 4) {
-      setError("Password must be at least 4 characters.");
+    if (p.length < 8) {
+      setError("Password must be at least 8 characters.");
       return false;
     }
     if (p !== c) {
@@ -49,24 +48,18 @@ function Signup({ setUser }) {
     if (!validate()) return;
 
     setSubmitting(true);
-    fetch(`${API_BASE}/register`, {
+    apiFetch("/register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: username.trim(),
         password,
         name: name.trim() || username.trim()
       })
     })
-      .then((res) => res.json().then((data) => ({ status: res.status, data })))
-      .then(({ status, data }) => {
-        if (data.error) {
-          setError(data.error);
-          return;
-        }
-        setUser(data);
+      .then((data) => {
+        onAuthenticated(data);
       })
-      .catch(() => setError("Registration failed. Try again."))
+      .catch((requestError) => setError(requestError.message || "Registration failed. Try again."))
       .finally(() => setSubmitting(false));
   };
 
@@ -111,7 +104,7 @@ function Signup({ setUser }) {
             <input
               className="field-input"
               type="password"
-              placeholder="At least 4 characters"
+              placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={onKeyDown}
@@ -132,7 +125,7 @@ function Signup({ setUser }) {
             {error && <p className="form-message error-text">{error}</p>}
 
             <button type="submit" className="primary-button full-width" disabled={submitting}>
-              {submitting ? "Creating account…" : "Create account"}
+              {submitting ? "Creating account..." : "Create account"}
             </button>
           </form>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { apiFetch } from "../lib/api";
 
 var WEEK_DAYS = [
   { day: "Mon", date: "Nov 17" },
@@ -38,6 +39,7 @@ function Scheduling({ user }) {
     return y + "-" + m + "-" + day;
   })();
   const [employee, setEmployee] = useState("");
+  const [employees, setEmployees] = useState([]);
   const [time, setTime] = useState("");
   const [message, setMessage] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
@@ -51,17 +53,16 @@ function Scheduling({ user }) {
 
   function loadWeekShifts(weekStart) {
     if (!weekStart) return;
-    var url = "http://localhost:4000/api/shifts?weekStart=" + encodeURIComponent(weekStart);
-    fetch(url)
-      .then(function (response) {
-        return response.json();
-      })
+    apiFetch("/shifts?weekStart=" + encodeURIComponent(weekStart))
       .then(function (data) {
         if (Array.isArray(data)) {
           setWeekShifts(data);
         } else {
           setWeekShifts([]);
         }
+      })
+      .catch(function () {
+        setWeekShifts([]);
       });
   }
 
@@ -86,14 +87,13 @@ function Scheduling({ user }) {
   function handleClearEntireSchedule() {
     if (window.confirm("Clear all shifts? You can regenerate with Auto scheduled.") !== true) return;
     setClearMessage("");
-    fetch("http://localhost:4000/api/shifts/clear", { method: "DELETE" })
-      .then(function (r) { return r.json(); })
+    apiFetch("/shifts/clear", { method: "DELETE" })
       .then(function (data) {
         setClearMessage("Schedule cleared. " + (data.removed || 0) + " shift(s) removed.");
         if (startDate) loadWeekShifts(startDate);
       })
-      .catch(function () {
-        setClearMessage("Failed to clear schedule.");
+      .catch(function (requestError) {
+        setClearMessage(requestError.message || "Failed to clear schedule.");
       });
   }
 
@@ -101,26 +101,20 @@ function Scheduling({ user }) {
     if (!startDate) return;
     setGenerateMessage("");
     setGenerating(true);
-    fetch("http://localhost:4000/api/schedules/generate", {
+    apiFetch("/schedules/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         weekStart: startDate,
         weekEnd: endDate,
         cleanFirst: true
       })
     })
-      .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.error) {
-          setGenerateMessage(data.error);
-        } else {
-          setGenerateMessage("Schedule cleared and filled: " + data.created + " shifts added.");
-          loadWeekShifts(startDate);
-        }
+        setGenerateMessage("Schedule cleared and filled: " + data.created + " shifts added.");
+        loadWeekShifts(startDate);
       })
-      .catch(function () {
-        setGenerateMessage("Failed to generate schedule.");
+      .catch(function (requestError) {
+        setGenerateMessage(requestError.message || "Failed to generate schedule.");
       })
       .finally(function () {
         setGenerating(false);
@@ -128,39 +122,58 @@ function Scheduling({ user }) {
   }
 
   function addShift() {
-    var emp = employee.trim();
     var t = time.trim();
-    if (!emp || !t) {
-      setMessage("Please enter employee name and time.");
+    if (!employee || !t) {
+      setMessage("Please choose an employee and time.");
       return;
     }
-    var payload = { employee: emp, time: t };
+    var payload = { employeeId: employee, time: t };
     var dayForShift = addShiftDate || startDate;
     if (dayForShift) payload.date = dayForShift;
-    fetch("http://localhost:4000/api/shifts", {
+    apiFetch("/shifts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     })
-      .then(function (response) {
-        return response.json();
+      .then(function () {
+        if (startDate) loadWeekShifts(startDate);
+        setTime("");
+        setMessage("Shift added successfully.");
+        setShowAddForm(false);
       })
-      .then(function (data) {
-        if (data.error) {
-          setMessage(data.error);
-        } else {
-          if (startDate) loadWeekShifts(startDate);
-          setEmployee("");
-          setTime("");
-          setMessage("Shift added successfully.");
-          setShowAddForm(false);
-        }
+      .catch(function (requestError) {
+        setMessage(requestError.message || "Failed to add shift.");
       });
   }
 
   useEffect(function () {
     if (startDate) loadWeekShifts(startDate);
   }, [startDate]);
+
+  useEffect(function () {
+    var mounted = true;
+    if (!isManager) {
+      setEmployees([]);
+      return function () {
+        mounted = false;
+      };
+    }
+    apiFetch("/employees")
+      .then(function (data) {
+        if (!mounted) return;
+        var list = Array.isArray(data) ? data : [];
+        setEmployees(list);
+        setEmployee(function (current) {
+          return current || (list[0] ? list[0].id : "");
+        });
+      })
+      .catch(function () {
+        if (!mounted) return;
+        setEmployees([]);
+      });
+    return function () {
+      mounted = false;
+    };
+  }, [isManager]);
 
   function getCalendarWeekDays() {
     var days = [];
@@ -197,7 +210,7 @@ function Scheduling({ user }) {
         result.push({
           employee: weekShifts[i].employee,
           time: weekShifts[i].time,
-          role: "Team Member",
+          role: weekShifts[i].role || "Team Member",
           tone: tone
         });
       }
@@ -227,130 +240,138 @@ function Scheduling({ user }) {
       </header>
 
       {isManager && showAddForm && (
-            <section className="info-block">
-              <h3>Add Shift</h3>
-              <div className="shift-form-grid">
-                <div className="date-input-wrap">
-                  <label className="field-label">Day</label>
-                  <select
-                    className="field-input"
-                    value={addShiftDate || startDate}
-                    onChange={function (e) {
-                      setAddShiftDate(e.target.value);
-                    }}
-                  >
-                    {calendarDays.map(function (d) {
-                      return (
-                        <option key={d.dateStr} value={d.dateStr}>
-                          {d.day} {d.date}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-                <input
-                  className="field-input"
-                  placeholder="Employee Name"
-                  value={employee}
-                  onChange={function (e) {
-                    setEmployee(e.target.value);
-                  }}
-                />
-                <input
-                  className="field-input"
-                  placeholder="Time (e.g. 09:00 - 17:00)"
-                  value={time}
-                  onChange={function (e) {
-                    setTime(e.target.value);
-                  }}
-                />
-                <button type="button" className="primary-button" onClick={addShift}>
-                  Save Shift
-                </button>
-              </div>
-              <p className="form-message" style={{ marginTop: 8, fontSize: 12, color: "#526281" }}>
-                Shifts can only be assigned on days the employee has set in My Availability (Dashboard).
-              </p>
-              {message && <p className="form-message">{message}</p>}
-            </section>
-          )}
-          {isManager && (
-            <section className="info-block" style={{ marginBottom: 16 }}>
-              <h3>Fill schedule from availability</h3>
-              <p className="form-message" style={{ marginBottom: 8 }}>
-                Clear all shifts, then use Auto scheduled to fill based on each employee&apos;s availability (Dashboard).
-              </p>
-              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={handleClearEntireSchedule}
-                >
-                  Clear entire schedule
-                </button>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={handleCleanAndFill}
-                  disabled={generating}
-                >
-                  {generating ? "Generating…" : "Auto scheduled"}
-                </button>
-                {clearMessage && (
-                  <span className="form-message">{clearMessage}</span>
-                )}
-                {generateMessage && (
-                  <span className={generateMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"}>
-                    {generateMessage}
-                  </span>
-                )}
-              </div>
-            </section>
-          )}
-          <section className="calendar-shell">
-            <p className="form-message" style={{ marginBottom: 8 }}>
-              Week: {startDate} to {endDate}.{isManager ? " Add shifts above or clean & fill from availability." : " View the schedule for this week."}
-            </p>
-            <div className="date-input-wrap" style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
-              <label className="field-label" style={{ marginBottom: 0 }}>Week</label>
-              <input
-                className="field-input compact-date-field"
-                type="date"
-                value={startDate}
-                onChange={handleStartDateChange}
-              />
+        <section className="info-block">
+          <h3>Add Shift</h3>
+          <div className="shift-form-grid">
+            <div className="date-input-wrap">
+              <label className="field-label">Day</label>
+              <select
+                className="field-input"
+                value={addShiftDate || startDate}
+                onChange={function (e) {
+                  setAddShiftDate(e.target.value);
+                }}
+              >
+                {calendarDays.map(function (d) {
+                  return (
+                    <option key={d.dateStr} value={d.dateStr}>
+                      {d.day} {d.date}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
-            <div className="schedule-calendar-grid">
-              {calendarDays.map(function (day) {
-                var dayShifts = getShiftsForDay(day.dateStr);
-                var headerClass = "schedule-day-header";
+            <select
+              className="field-input"
+              value={employee}
+              onChange={function (e) {
+                setEmployee(e.target.value);
+              }}
+            >
+              <option value="">Select employee</option>
+              {employees.map(function (entry) {
                 return (
-                  <article key={day.dateStr} className="schedule-day-column">
-                    <header className={headerClass}>
-                      <p className="schedule-day-name">{day.day}</p>
-                      <p className="schedule-day-date">{day.date}</p>
-                    </header>
-                    <div className="schedule-day-body">
-                      {dayShifts.length === 0 && <p className="schedule-empty">No shifts</p>}
-                      {dayShifts.length > 0 && (
-                        <div className="shift-card-stack">
-                          {dayShifts.map(function (shift, index) {
-                            var cardClass = "shift-card shift-card-" + shift.tone;
-                            return (
-                              <article key={shift.employee + "-" + shift.time + "-" + index} className={cardClass}>
-                                <p className="shift-card-name">{shift.employee}</p>
-                                <p className="shift-card-time">{shift.time}</p>
-                                <p className="shift-card-role">{shift.role}</p>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </article>
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name || entry.username}
+                  </option>
                 );
               })}
-            </div>
+            </select>
+            <input
+              className="field-input"
+              placeholder="Time (e.g. 09:00 - 17:00)"
+              value={time}
+              onChange={function (e) {
+                setTime(e.target.value);
+              }}
+            />
+            <button type="button" className="primary-button" onClick={addShift}>
+              Save Shift
+            </button>
+          </div>
+          <p className="form-message" style={{ marginTop: 8, fontSize: 12, color: "#526281" }}>
+            Shifts can only be assigned on days the employee has set in My Availability (Dashboard).
+          </p>
+          {message && <p className="form-message">{message}</p>}
+        </section>
+      )}
+      {isManager && (
+        <section className="info-block" style={{ marginBottom: 16 }}>
+          <h3>Fill schedule from availability</h3>
+          <p className="form-message" style={{ marginBottom: 8 }}>
+            Clear all shifts, then use Auto scheduled to fill based on each employee&apos;s availability (Dashboard).
+          </p>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={handleClearEntireSchedule}
+            >
+              Clear entire schedule
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={handleCleanAndFill}
+              disabled={generating}
+            >
+              {generating ? "Generating..." : "Auto scheduled"}
+            </button>
+            {clearMessage && (
+              <span className="form-message">{clearMessage}</span>
+            )}
+            {generateMessage && (
+              <span className={generateMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"}>
+                {generateMessage}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+      <section className="calendar-shell">
+        <p className="form-message" style={{ marginBottom: 8 }}>
+          Week: {startDate} to {endDate}.{isManager ? " Add shifts above or clean & fill from availability." : " View the schedule for this week."}
+        </p>
+        <div className="date-input-wrap" style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
+          <label className="field-label" style={{ marginBottom: 0 }}>Week</label>
+          <input
+            className="field-input compact-date-field"
+            type="date"
+            value={startDate}
+            onChange={handleStartDateChange}
+          />
+        </div>
+        <div className="schedule-calendar-grid">
+          {calendarDays.map(function (day) {
+            var dayShifts = getShiftsForDay(day.dateStr);
+            var headerClass = "schedule-day-header";
+            return (
+              <article key={day.dateStr} className="schedule-day-column">
+                <header className={headerClass}>
+                  <p className="schedule-day-name">{day.day}</p>
+                  <p className="schedule-day-date">{day.date}</p>
+                </header>
+                <div className="schedule-day-body">
+                  {dayShifts.length === 0 && <p className="schedule-empty">No shifts</p>}
+                  {dayShifts.length > 0 && (
+                    <div className="shift-card-stack">
+                      {dayShifts.map(function (shift, index) {
+                        var cardClass = "shift-card shift-card-" + shift.tone;
+                        return (
+                          <article key={shift.employee + "-" + shift.time + "-" + index} className={cardClass}>
+                            <p className="shift-card-name">{shift.employee}</p>
+                            <p className="shift-card-time">{shift.time}</p>
+                            <p className="shift-card-role">{shift.role}</p>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </section>
     </div>
   );

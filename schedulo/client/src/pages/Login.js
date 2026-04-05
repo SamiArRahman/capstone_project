@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 
-function Login({ setUser }) {
+function Login({ onAuthenticated }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const login = () => {
+  const login = async () => {
     const cleanUsername = username.trim();
     const cleanPassword = password.trim();
 
@@ -15,25 +17,22 @@ function Login({ setUser }) {
       return;
     }
 
-    fetch("http://localhost:4000/api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        username: cleanUsername,
-        password: cleanPassword
-      })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setError("");
-          setUser(data);
-        }
+    try {
+      setSubmitting(true);
+      const data = await apiFetch("/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: cleanUsername,
+          password: cleanPassword
+        })
       });
+      setError("");
+      onAuthenticated(data);
+    } catch (fetchError) {
+      setError(fetchError.message || "Login failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const onKeyDown = event => {
@@ -75,12 +74,12 @@ function Login({ setUser }) {
 
           {error && <p className="form-message error-text">{error}</p>}
 
-          <button className="primary-button full-width" onClick={login}>
-            Sign In
+          <button className="primary-button full-width" onClick={login} disabled={submitting}>
+            {submitting ? "Signing in..." : "Sign In"}
           </button>
 
           <p className="hint-text">
-            Demo: manager/1234 or employee/1234. No account? <Link to="/signup">Sign up</Link>
+            Demo seed: manager/Manager1234! or employee/Employee1234!. No account? <Link to="/signup">Sign up</Link>
           </p>
         </div>
       </div>

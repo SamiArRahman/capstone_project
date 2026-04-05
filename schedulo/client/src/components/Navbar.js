@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 
 function Navbar({ user }) {
   const [pendingCount, setPendingCount] = useState(0);
@@ -9,13 +10,10 @@ function Navbar({ user }) {
 
     const loadSummary = async () => {
       try {
-        const response = await fetch("http://localhost:4000/api/requests/summary");
-        const data = await response.json();
-
-        if (!response.ok || !mounted) {
+        const data = await apiFetch("/requests/summary");
+        if (!mounted) {
           return;
         }
-
         setPendingCount(Number(data.pendingTotal) || 0);
       } catch {
         // Ignore transient API/network errors for top nav badge.
