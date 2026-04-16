@@ -140,16 +140,31 @@ Make sure the backend connected to MongoDB successfully on startup. The seed acc
 
 ## Deployment Notes
 
-For Vercel deployment, configure:
+The simplest deployment setup for this repo is two separate Vercel projects:
 
-- Root Directory: `schedulo`
-- Install Command: `npm install`
-- Build Command: `npm run build`
-- Output Directory: `client/build`
+### Frontend project
+
+Configure a Vercel project with:
+
+- Root Directory: `schedulo/client`
+
+Environment variables:
+
+- `REACT_APP_API_BASE=https://your-backend-domain.vercel.app/api`
+
+### Backend project
+
+Configure a second Vercel project with:
+
+- Root Directory: `schedulo/server`
 
 Environment variables:
 
 - `MONGO_URI`
 - `JWT_SECRET`
 
-The Vercel project uses the static frontend build from `client/build` and the API entry points in `api/`.
+Notes:
+
+- The frontend already reads `REACT_APP_API_BASE` and falls back to `/api` for local use.
+- The backend is an Express app and can be deployed directly from `schedulo/server`.
+- This avoids Hobby-plan serverless function count limits and avoids mixing the static SPA build with backend routing in one Vercel project.
