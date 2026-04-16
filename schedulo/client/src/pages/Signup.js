@@ -44,6 +44,9 @@ function Signup({ onAuthenticated }) {
 
   const signup = (e) => {
     e.preventDefault();
+    if (submitting) {
+      return;
+    }
     setError("");
     if (!validate()) return;
 
@@ -61,10 +64,6 @@ function Signup({ onAuthenticated }) {
       })
       .catch((requestError) => setError(requestError.message || "Registration failed. Try again."))
       .finally(() => setSubmitting(false));
-  };
-
-  const onKeyDown = (e) => {
-    if (e.key === "Enter") signup(e);
   };
 
   return (
@@ -86,7 +85,6 @@ function Signup({ onAuthenticated }) {
               placeholder="e.g. jdoe"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={onKeyDown}
               autoComplete="username"
             />
 
@@ -96,7 +94,6 @@ function Signup({ onAuthenticated }) {
               placeholder="e.g. John Doe"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={onKeyDown}
               autoComplete="name"
             />
 
@@ -107,7 +104,6 @@ function Signup({ onAuthenticated }) {
               placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={onKeyDown}
               autoComplete="new-password"
             />
 
@@ -118,7 +114,6 @@ function Signup({ onAuthenticated }) {
               placeholder="Re-enter password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              onKeyDown={onKeyDown}
               autoComplete="new-password"
             />
 

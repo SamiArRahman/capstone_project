@@ -882,6 +882,11 @@ app.use(function errorHandler(error, req, res, next) {
     return;
   }
   if (error && error.code === 11000) {
+    const duplicateField = error.keyPattern ? Object.keys(error.keyPattern)[0] : "";
+    if (duplicateField === "username") {
+      res.status(409).json({ error: "Username already taken" });
+      return;
+    }
     res.status(409).json({ error: "A record with that value already exists" });
     return;
   }
