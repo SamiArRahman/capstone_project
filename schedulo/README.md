@@ -26,7 +26,7 @@ The app stores manager and employee accounts, schedules, availability, PTO reque
 
 - `client/` - React frontend
 - `server/` - Express API and MongoDB models
-- `api/` - Vercel serverless entry points
+- `render.yaml` - Render blueprint for the backend service
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ Before running the project locally, make sure you have:
 
 ## Environment Variables
 
-Create `server/.env` and add:
+Create `server/.env` from `server/.env.example` and add:
 
 ```env
 MONGO_URI=your-mongodb-connection-string
@@ -63,6 +63,9 @@ Notes:
 
 - `MONGO_URI` is required for the app to function locally.
 - The server has a local-development fallback for `JWT_SECRET`, but setting it explicitly is recommended.
+- `CORS_ORIGIN` is optional locally, but recommended in production so only your frontend origin can call the API from the browser.
+
+Create `client/.env` from `client/.env.example` if you want the frontend to call a deployed backend outside local development.
 
 ## Install Dependencies
 
@@ -140,31 +143,55 @@ Make sure the backend connected to MongoDB successfully on startup. The seed acc
 
 ## Deployment Notes
 
-The simplest deployment setup for this repo is two separate Vercel projects:
+This repo is a good fit for:
 
-### Frontend project
+- Vercel for the React frontend
+- Render for the Express + MongoDB backend
 
-Configure a Vercel project with:
+### Frontend on Vercel
 
-- Root Directory: `schedulo/client`
+Create a Vercel project with:
 
-Environment variables:
+- Root Directory: `client`
+- Framework Preset: Create React App
 
-- `REACT_APP_API_BASE=https://your-backend-domain.vercel.app/api`
+Set this environment variable in Vercel:
 
-### Backend project
-
-Configure a second Vercel project with:
-
-- Root Directory: `schedulo/server`
-
-Environment variables:
-
-- `MONGO_URI`
-- `JWT_SECRET`
+- `REACT_APP_API_BASE=https://your-render-service.onrender.com/api`
 
 Notes:
 
-- The frontend already reads `REACT_APP_API_BASE` and falls back to `/api` for local use.
-- The backend is an Express app and can be deployed directly from `schedulo/server`.
-- This avoids Hobby-plan serverless function count limits and avoids mixing the static SPA build with backend routing in one Vercel project.
+- The frontend already reads `REACT_APP_API_BASE` in `client/src/lib/api.js`.
+- `client/vercel.json` adds an SPA rewrite so React Router routes still load on refresh or direct navigation.
+
+### Backend on Render
+
+Create a Render Web Service with:
+
+- Root Directory: `server`
+- Build Command: `npm install`
+- Start Command: `npm start`
+
+Required environment variables:
+
+- `MONGO_URI`
+- `JWT_SECRET`
+- `CORS_ORIGIN=https://your-frontend-project.vercel.app`
+
+Notes:
+
+- The backend already reads `PORT`, which matches Render's port-binding guidance.
+- `render.yaml` is included if you want to create the service from a Blueprint instead of entering settings by hand.
+- The API connects to MongoDB on demand, so you do not need a separate worker process.
+
+### Suggested order
+
+1. Deploy the backend to Render and confirm `GET /api/health` returns `{ "ok": true }`.
+2. Add the Render URL to Vercel as `REACT_APP_API_BASE`.
+3. Deploy the frontend to Vercel.
+4. Set `CORS_ORIGIN` on Render to your final Vercel frontend URL and redeploy the backend.
+
+### Free-tier warning
+
+- Vercel Hobby is free for personal projects.
+- Render Free works well for demos and capstones, but free web services spin down after 15 minutes of inactivity and are not recommended for production.

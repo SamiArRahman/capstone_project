@@ -4,14 +4,24 @@ const dotenv = require("dotenv");
 const path = require("path");
 const mongoose = require("mongoose");
 const { AuditLog, Availability, PtoRequest, Shift, SwapRequest, User, connectToDatabase } = require("./db");
-const { DEFAULT_SHIFT_END, DEFAULT_SHIFT_START, DAY_NAMES, REQUEST_STATUSES, VALID_AVAILABILITY_DAYS } = require("./config");
+const { DEFAULT_SHIFT_END, DEFAULT_SHIFT_START, DAY_NAMES, REQUEST_STATUSES, VALID_AVAILABILITY_DAYS, getAllowedCorsOrigins } = require("./config");
 const { comparePassword, hashPassword, signToken, verifyToken } = require("./security");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
 
 const app = express();
+const allowedCorsOrigins = getAllowedCorsOrigins();
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedCorsOrigins.length === 0 || allowedCorsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, false);
+  }
+}));
 app.use(express.json());
 
 function asyncHandler(fn) {

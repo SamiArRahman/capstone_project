@@ -21,6 +21,13 @@ function getMongoUri() {
   return process.env.MONGO_URI || process.env.MONGODB_URI || "";
 }
 
+function getAllowedCorsOrigins() {
+  return String(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function getJwtSecret() {
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim()) {
     return process.env.JWT_SECRET.trim();
@@ -42,6 +49,7 @@ module.exports = {
   REQUEST_STATUSES,
   USER_ROLES,
   VALID_AVAILABILITY_DAYS,
+  getAllowedCorsOrigins,
   getJwtSecret,
   getMongoUri
 };
