@@ -520,20 +520,9 @@ p {
 
 .shift-card {
   border-radius: 10px;
+  background: #3e7de8;
   color: #fff;
   padding: 11px 12px;
-}
-
-.shift-card-blue {
-  background: #3e7de8;
-}
-
-.shift-card-green {
-  background: #1fb885;
-}
-
-.shift-card-red {
-  background: #f14444;
 }
 
 .shift-card-name {

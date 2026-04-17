@@ -206,12 +206,10 @@ function Scheduling({ user }) {
     var result = [];
     for (var i = 0; i < weekShifts.length; i++) {
       if (weekShifts[i].date === dateStr) {
-        var tone = i % 3 === 0 ? "blue" : i % 3 === 1 ? "green" : "red";
         result.push({
           employee: weekShifts[i].employee,
           time: weekShifts[i].time,
-          role: weekShifts[i].role || "Team Member",
-          tone: tone
+          role: weekShifts[i].role || "Team Member"
         });
       }
     }
@@ -356,9 +354,8 @@ function Scheduling({ user }) {
                   {dayShifts.length > 0 && (
                     <div className="shift-card-stack">
                       {dayShifts.map(function (shift, index) {
-                        var cardClass = "shift-card shift-card-" + shift.tone;
                         return (
-                          <article key={shift.employee + "-" + shift.time + "-" + index} className={cardClass}>
+                          <article key={shift.employee + "-" + shift.time + "-" + index} className="shift-card">
                             <p className="shift-card-name">{shift.employee}</p>
                             <p className="shift-card-time">{shift.time}</p>
                             <p className="shift-card-role">{shift.role}</p>
