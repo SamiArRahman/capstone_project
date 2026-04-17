@@ -17,8 +17,8 @@ The app stores manager and employee accounts, schedules, availability, PTO reque
 - seeded demo accounts for local testing
 - employee availability management
 - manual and auto-generated schedules
-- employee profile email management
-- finalized schedule emails for the selected week
+- employee profile management
+- finalized schedule notifications for the selected week
 - PTO request workflow
 - shift swap workflow
 - employee management for managers
@@ -46,12 +46,6 @@ Create `server/.env` from `server/.env.example` and add:
 ```env
 MONGO_URI=your-mongodb-connection-string
 JWT_SECRET=your-secret-key
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your-smtp-username
-SMTP_PASS=your-smtp-password
-EMAIL_FROM=Schedulo <no-reply@example.com>
 ```
 
 Optional seed overrides:
@@ -72,7 +66,6 @@ Notes:
 - `MONGO_URI` is required for the app to function locally.
 - The server has a local-development fallback for `JWT_SECRET`, but setting it explicitly is recommended.
 - `CORS_ORIGIN` is optional locally, but recommended in production so only your frontend origin can call the API from the browser.
-- SMTP settings are required if you want `Finalize Schedule` to send weekly schedule emails.
 
 Create `client/.env` from `client/.env.example` if you want the frontend to call a deployed backend outside local development.
 
@@ -186,12 +179,6 @@ Required environment variables:
 - `MONGO_URI`
 - `JWT_SECRET`
 - `CORS_ORIGIN=https://your-frontend-project.vercel.app`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `EMAIL_FROM`
 
 Notes:
 

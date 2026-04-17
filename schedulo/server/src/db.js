@@ -266,12 +266,46 @@ const auditLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const notificationSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+    type: {
+      type: String,
+      required: true
+    },
+    title: {
+      type: String,
+      required: true
+    },
+    message: {
+      type: String,
+      required: true
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
+    readAt: {
+      type: Date,
+      default: null
+    }
+  },
+  { timestamps: true }
+);
+
+notificationSchema.index({ user: 1, readAt: 1, createdAt: -1 });
+
 const User = mongoose.models.User || mongoose.model("User", userSchema);
 const Availability = mongoose.models.Availability || mongoose.model("Availability", availabilitySchema);
 const Shift = mongoose.models.Shift || mongoose.model("Shift", shiftSchema);
 const PtoRequest = mongoose.models.PtoRequest || mongoose.model("PtoRequest", ptoRequestSchema);
 const SwapRequest = mongoose.models.SwapRequest || mongoose.model("SwapRequest", swapRequestSchema);
 const AuditLog = mongoose.models.AuditLog || mongoose.model("AuditLog", auditLogSchema);
+const Notification = mongoose.models.Notification || mongoose.model("Notification", notificationSchema);
 
 async function ensureSeedUser(seedConfig, role, maxHoursPerWeek, skills) {
   const existing = await User.findOne({ username: seedConfig.username });
@@ -346,6 +380,7 @@ async function connectToDatabase() {
 module.exports = {
   AuditLog,
   Availability,
+  Notification,
   PtoRequest,
   Shift,
   SwapRequest,

@@ -8,6 +8,7 @@ import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
 import Requests from "./pages/Requests";
 import Analytics from "./pages/Analytics";
+import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -113,6 +114,7 @@ function App() {
 
               <Route path="/employees" element={<Employees user={user} />} />
               <Route path="/requests" element={<Requests user={user} />} />
+              <Route path="/notifications" element={<Notifications user={user} />} />
               <Route path="/profile" element={<Profile user={user} onUserUpdated={handleUserUpdated} />} />
 
               {managerView && <Route path="/analytics" element={<Analytics />} />}

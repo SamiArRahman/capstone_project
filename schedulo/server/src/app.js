@@ -3,8 +3,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
 const mongoose = require("mongoose");
-const { AuditLog, Availability, PtoRequest, Shift, SwapRequest, User, connectToDatabase } = require("./db");
-const { isEmailConfigured, sendScheduleFinalizedEmail } = require("./email");
+const { AuditLog, Availability, Notification, PtoRequest, Shift, SwapRequest, User, connectToDatabase } = require("./db");
 const { DEFAULT_SHIFT_END, DEFAULT_SHIFT_START, DAY_NAMES, REQUEST_STATUSES, VALID_AVAILABILITY_DAYS, getAllowedCorsOrigins } = require("./config");
 const { comparePassword, hashPassword, signToken, verifyToken } = require("./security");
 
@@ -232,6 +231,19 @@ function serializeSwapRequest(request) {
   };
 }
 
+function serializeNotification(notification) {
+  return {
+    id: String(notification._id),
+    type: notification.type,
+    title: notification.title || "",
+    message: notification.message || "",
+    metadata: notification.metadata || {},
+    readAt: notification.readAt,
+    createdAt: notification.createdAt,
+    updatedAt: notification.updatedAt
+  };
+}
+
 async function logAudit(actor, action, entityType, entityId, details) {
   await AuditLog.create({
     actor: actor ? actor._id : null,
@@ -242,6 +254,42 @@ async function logAudit(actor, action, entityType, entityId, details) {
     entityId: entityId ? String(entityId) : "",
     details: details || {}
   });
+}
+
+function buildScheduleFinalizedMessage(weekStart, weekEnd, shifts) {
+  const shiftCount = Array.isArray(shifts) ? shifts.length : 0;
+  if (shiftCount > 0) {
+    return `Your schedule for ${weekStart} to ${weekEnd} has been finalized. You have ${shiftCount} shift(s) this week.`;
+  }
+  return `Your schedule for ${weekStart} to ${weekEnd} has been finalized. You have no shifts scheduled this week.`;
+}
+
+async function upsertScheduleFinalizedNotification(user, weekStart, weekEnd, shifts) {
+  const safeShifts = Array.isArray(shifts) ? shifts : [];
+  const title = "Schedule Finalized";
+  const message = buildScheduleFinalizedMessage(weekStart, weekEnd, safeShifts);
+  return Notification.findOneAndUpdate(
+    {
+      user: user._id,
+      type: "schedule_finalized",
+      "metadata.weekStart": weekStart,
+      "metadata.weekEnd": weekEnd
+    },
+    {
+      user: user._id,
+      type: "schedule_finalized",
+      title,
+      message,
+      metadata: {
+        weekStart,
+        weekEnd,
+        shiftCount: safeShifts.length,
+        shifts: safeShifts
+      },
+      readAt: null
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 }
 
 async function resolveUser(identifier) {
@@ -413,6 +461,46 @@ app.patch("/api/me", asyncHandler(async (req, res) => {
     changedPassword: Boolean(nextPassword)
   });
   res.json(serializeUser(req.user));
+}));
+
+app.get("/api/notifications/summary", asyncHandler(async (req, res) => {
+  const unreadCount = await Notification.countDocuments({ user: req.user._id, readAt: null });
+  res.json({ unreadCount });
+}));
+
+app.get("/api/notifications", asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+  const filter = { user: req.user._id };
+  if (String(req.query.status || "").trim().toLowerCase() === "unread") {
+    filter.readAt = null;
+  }
+  const notifications = await Notification.find(filter).sort({ createdAt: -1 }).limit(limit);
+  res.json(notifications.map(serializeNotification));
+}));
+
+app.patch("/api/notifications/read-all", asyncHandler(async (req, res) => {
+  const result = await Notification.updateMany(
+    { user: req.user._id, readAt: null },
+    { readAt: new Date() }
+  );
+  res.json({ updated: result.modifiedCount || 0 });
+}));
+
+app.patch("/api/notifications/:id/read", asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    res.status(400).json({ error: "Valid notification id is required" });
+    return;
+  }
+  const notification = await Notification.findOne({ _id: req.params.id, user: req.user._id });
+  if (!notification) {
+    res.status(404).json({ error: "Notification not found" });
+    return;
+  }
+  if (!notification.readAt) {
+    notification.readAt = new Date();
+    await notification.save();
+  }
+  res.json(serializeNotification(notification));
 }));
 
 async function ensureEmployeeIsSchedulable(user, date, startTime, endTime) {
@@ -756,83 +844,56 @@ app.post("/api/schedules/finalize", requireManager, asyncHandler(async (req, res
     res.status(400).json({ error: "weekStart (YYYY-MM-DD) is required" });
     return;
   }
-  if (!isEmailConfigured()) {
-    res.status(503).json({ error: "Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and EMAIL_FROM on the backend." });
-    return;
-  }
 
   const weekEnd = clampWeekEndDate(weekStart, req.body.weekEnd);
+  const employeeUsers = await User.find({ isActive: true, role: "employee" }).sort({ name: 1, username: 1 });
+  if (employeeUsers.length === 0) {
+    res.status(400).json({ error: "No active employees were found to notify." });
+    return;
+  }
   const shifts = await Shift.find({
     date: { $gte: weekStart, $lte: weekEnd }
   }).sort({ date: 1, startTime: 1 }).populate("employee", "name username email isActive");
 
-  if (shifts.length === 0) {
-    res.status(400).json({ error: "No scheduled shifts were found for this week." });
-    return;
-  }
-
   const scheduleByEmployee = new Map();
-  shifts.forEach((shift) => {
-    const employee = shift.employee && shift.employee._id ? shift.employee : null;
-    if (!employee || employee.isActive === false) {
-      return;
-    }
-    const key = String(employee._id);
-    if (!scheduleByEmployee.has(key)) {
-      scheduleByEmployee.set(key, {
-        userId: key,
-        employeeName: employee.name || employee.username,
-        email: employee.email || "",
-        shifts: []
-      });
-    }
-    scheduleByEmployee.get(key).shifts.push(serializeShift(shift));
+  employeeUsers.forEach((employee) => {
+    scheduleByEmployee.set(String(employee._id), {
+      userId: String(employee._id),
+      employeeName: employee.name || employee.username,
+      user: employee,
+      shifts: []
+    });
   });
 
-  const sent = [];
-  const skippedNoEmail = [];
-  const failed = [];
+  shifts.forEach((shift) => {
+    const employee = shift.employee && shift.employee._id ? shift.employee : null;
+    if (!employee || employee.isActive === false || !scheduleByEmployee.has(String(employee._id))) {
+      return;
+    }
+    scheduleByEmployee.get(String(employee._id)).shifts.push(serializeShift(shift));
+  });
+
   const recipients = Array.from(scheduleByEmployee.values());
+  const notified = [];
 
   for (let index = 0; index < recipients.length; index += 1) {
     const recipient = recipients[index];
-    if (!isLikelyEmailAddress(recipient.email)) {
-      skippedNoEmail.push(recipient.employeeName);
-      continue;
-    }
-    try {
-      await sendScheduleFinalizedEmail({
-        to: recipient.email,
-        employeeName: recipient.employeeName,
-        weekStart,
-        weekEnd,
-        shifts: recipient.shifts
-      });
-      sent.push(recipient.employeeName);
-    } catch (error) {
-      failed.push({
-        employeeName: recipient.employeeName,
-        error: error && error.message ? error.message : "Failed to send email"
-      });
-    }
+    await upsertScheduleFinalizedNotification(recipient.user, weekStart, weekEnd, recipient.shifts);
+    notified.push(recipient.employeeName);
   }
 
   await logAudit(req.user, "schedule_finalized", "shift", weekStart, {
     weekStart,
     weekEnd,
-    sent: sent.length,
-    skippedNoEmail: skippedNoEmail.length,
-    failed: failed.length
+    notified: notified.length
   });
 
   res.json({
     weekStart,
     weekEnd,
     totalRecipients: recipients.length,
-    sentCount: sent.length,
-    sent,
-    skippedNoEmail,
-    failed
+    notifiedCount: notified.length,
+    notified
   });
 }));
 

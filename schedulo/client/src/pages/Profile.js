@@ -45,7 +45,7 @@ function Profile({ user, onUserUpdated }) {
       <header className="page-heading compact-heading">
         <div>
           <h2>Profile</h2>
-          <p>Manage the contact details the app uses for schedule emails.</p>
+          <p>Manage your display name, contact email, and password.</p>
         </div>
       </header>
 
@@ -71,7 +71,7 @@ function Profile({ user, onUserUpdated }) {
             />
           </div>
           <div>
-            <label className="field-label">Email For Notifications</label>
+            <label className="field-label">Contact Email</label>
             <input
               className="field-input"
               type="email"
@@ -92,7 +92,7 @@ function Profile({ user, onUserUpdated }) {
           </div>
           <div className="profile-help">
             <p className="form-message">
-              Managers use this email when they finalize the weekly schedule and send it out.
+              This email is saved with your account and can be used for contact details later.
             </p>
           </div>
           <div className="profile-actions">

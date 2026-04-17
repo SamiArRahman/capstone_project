@@ -135,13 +135,7 @@ function Scheduling({ user }) {
       })
     })
       .then(function (data) {
-        var summary = "Final schedule emailed to " + (data.sentCount || 0) + " team member(s).";
-        if (Array.isArray(data.skippedNoEmail) && data.skippedNoEmail.length > 0) {
-          summary += " Missing email: " + data.skippedNoEmail.join(", ") + ".";
-        }
-        if (Array.isArray(data.failed) && data.failed.length > 0) {
-          summary += " Failed: " + data.failed.map(function (entry) { return entry.employeeName; }).join(", ") + ".";
-        }
+        var summary = "Final schedule posted to " + (data.notifiedCount || 0) + " employee notification(s).";
         setFinalizeMessage(summary);
       })
       .catch(function (requestError) {
@@ -352,7 +346,7 @@ function Scheduling({ user }) {
               onClick={handleFinalizeSchedule}
               disabled={finalizing}
             >
-              {finalizing ? "Sending..." : "Finalize Schedule"}
+              {finalizing ? "Posting..." : "Finalize Schedule"}
             </button>
             {clearMessage && (
               <span className="form-message">{clearMessage}</span>
@@ -369,7 +363,7 @@ function Scheduling({ user }) {
             )}
           </div>
           <p className="form-message" style={{ marginTop: 10 }}>
-            Finalize Schedule sends the selected week&apos;s shifts to team members using the email saved in their Profile.
+            Finalize Schedule creates in-app notifications for employees for the selected week.
           </p>
         </section>
       )}

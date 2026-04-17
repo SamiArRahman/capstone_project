@@ -4,17 +4,24 @@ import { apiFetch } from "../lib/api";
 
 function Navbar({ user }) {
   const [pendingCount, setPendingCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     let mounted = true;
 
     const loadSummary = async () => {
       try {
-        const data = await apiFetch("/requests/summary");
+        const results = await Promise.allSettled([
+          apiFetch("/requests/summary"),
+          apiFetch("/notifications/summary")
+        ]);
         if (!mounted) {
           return;
         }
-        setPendingCount(Number(data.pendingTotal) || 0);
+        const requestSummary = results[0] && results[0].status === "fulfilled" ? results[0].value : {};
+        const notificationSummary = results[1] && results[1].status === "fulfilled" ? results[1].value : {};
+        setPendingCount(Number((requestSummary || {}).pendingTotal) || 0);
+        setNotificationCount(Number((notificationSummary || {}).unreadCount) || 0);
       } catch {
         // Ignore transient API/network errors for top nav badge.
       }
@@ -34,6 +41,7 @@ function Navbar({ user }) {
     { to: "/scheduling", label: "Scheduling", managerOnly: false },
     { to: "/employees", label: "Employees", managerOnly: false },
     { to: "/requests", label: "Requests", managerOnly: false },
+    { to: "/notifications", label: "Notifications", managerOnly: false },
     { to: "/profile", label: "Profile", managerOnly: false },
     { to: "/analytics", label: "Analytics", managerOnly: true }
   ];
@@ -47,11 +55,12 @@ function Navbar({ user }) {
           key={link.to}
           to={link.to}
           className={({ isActive }) =>
-            `tab-link${isActive ? " tab-link-active" : ""}${link.label === "Requests" ? " tab-link-with-badge" : ""}`
+            `tab-link${isActive ? " tab-link-active" : ""}${link.label === "Requests" || link.label === "Notifications" ? " tab-link-with-badge" : ""}`
           }
         >
           <span>{link.label}</span>
-          {link.label === "Requests" && <span className="mini-badge">{pendingCount}</span>}
+          {link.label === "Requests" && pendingCount > 0 && <span className="mini-badge">{pendingCount}</span>}
+          {link.label === "Notifications" && notificationCount > 0 && <span className="mini-badge">{notificationCount}</span>}
         </NavLink>
       ))}
     </nav>
