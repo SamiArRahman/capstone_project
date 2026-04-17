@@ -288,7 +288,7 @@ function Scheduling({ user }) {
             </button>
           </div>
           <p className="form-message" style={{ marginTop: 8, fontSize: 12, color: "#526281" }}>
-            Shifts can only be assigned on days the employee has set in My Availability (Dashboard).
+            Shifts can only be assigned on days the employee is available. Managers can update this in Team Members.
           </p>
           {message && <p className="form-message">{message}</p>}
         </section>
@@ -297,7 +297,7 @@ function Scheduling({ user }) {
         <section className="info-block" style={{ marginBottom: 16 }}>
           <h3>Fill schedule from availability</h3>
           <p className="form-message" style={{ marginBottom: 8 }}>
-            Clear all shifts, then use Auto scheduled to fill based on each employee&apos;s availability (Dashboard).
+            Clear all shifts, then use Auto scheduled to fill based on each team member&apos;s saved availability.
           </p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button

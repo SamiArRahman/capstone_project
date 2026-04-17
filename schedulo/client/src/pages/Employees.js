@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 
+var DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function sortAvailabilityDays(days) {
+  return days.slice().sort(function (left, right) {
+    return DAYS_OF_WEEK.indexOf(left) - DAYS_OF_WEEK.indexOf(right);
+  });
+}
+
 function Employees({ user }) {
   var isManager = user && user.role === "manager";
   var [employees, setEmployees] = useState([]);
@@ -23,6 +31,12 @@ function Employees({ user }) {
   var [addMaxHours, setAddMaxHours] = useState(40);
   var [addSkills, setAddSkills] = useState("");
   var [message, setMessage] = useState("");
+  var [availabilityEditingId, setAvailabilityEditingId] = useState(null);
+  var [availabilityEditDays, setAvailabilityEditDays] = useState([]);
+  var [availabilityEditTimeFrom, setAvailabilityEditTimeFrom] = useState("09:00");
+  var [availabilityEditTimeTo, setAvailabilityEditTimeTo] = useState("17:00");
+  var [availabilityEditMessage, setAvailabilityEditMessage] = useState("");
+  var [availabilitySaving, setAvailabilitySaving] = useState(false);
 
   function loadEmployees() {
     setLoading(true);
@@ -53,6 +67,72 @@ function Employees({ user }) {
       if (availabilityAll[i].userId === userId) return availabilityAll[i];
     }
     return null;
+  }
+
+  function upsertAvailabilityRecord(record) {
+    if (!record || !record.userId) return;
+    setAvailabilityAll(function (prev) {
+      var next = prev.slice();
+      var found = false;
+      for (var i = 0; i < next.length; i++) {
+        if (next[i].userId === record.userId) {
+          next[i] = record;
+          found = true;
+          break;
+        }
+      }
+      if (!found) next.push(record);
+      return next;
+    });
+  }
+
+  function handleEditAvailabilityClick(employee) {
+    var availability = getAvailabilityForUser(employee.id);
+    setExpandedAvailabilityId(employee.id);
+    setAvailabilityEditingId(employee.id);
+    setAvailabilityEditDays(sortAvailabilityDays(availability && Array.isArray(availability.days) ? availability.days : []));
+    setAvailabilityEditTimeFrom(availability && availability.timeFrom ? availability.timeFrom : "09:00");
+    setAvailabilityEditTimeTo(availability && availability.timeTo ? availability.timeTo : "17:00");
+    setAvailabilityEditMessage("");
+  }
+
+  function handleCancelAvailabilityEdit() {
+    setAvailabilityEditingId(null);
+    setAvailabilityEditMessage("");
+    setAvailabilitySaving(false);
+  }
+
+  function toggleEditedAvailabilityDay(day) {
+    setAvailabilityEditDays(function (prev) {
+      if (prev.indexOf(day) >= 0) {
+        return prev.filter(function (entry) { return entry !== day; });
+      }
+      return sortAvailabilityDays(prev.concat([day]));
+    });
+  }
+
+  function handleSaveAvailability(employee) {
+    setAvailabilityEditMessage("");
+    setAvailabilitySaving(true);
+    apiFetch("/availability", {
+      method: "PUT",
+      body: JSON.stringify({
+        userId: employee.id,
+        days: availabilityEditDays,
+        timeFrom: availabilityEditTimeFrom,
+        timeTo: availabilityEditTimeTo
+      })
+    })
+      .then(function (data) {
+        upsertAvailabilityRecord(data);
+        setAvailabilityEditMessage("Availability saved.");
+      })
+      .catch(function (requestError) {
+        setAvailabilityEditMessage(requestError.message || "Failed to save availability.");
+      })
+      .finally(function () {
+        setAvailabilitySaving(false);
+      });
   }
 
   function handleEditClick(employee) {
@@ -286,7 +366,19 @@ function Employees({ user }) {
                     <button
                       type="button"
                       className="availability-link"
-                      onClick={function () { setExpandedAvailabilityId(isExpanded ? null : emp.id); }}
+                      onClick={function () {
+                        if (isExpanded) {
+                          setExpandedAvailabilityId(null);
+                          if (availabilityEditingId === emp.id) {
+                            handleCancelAvailabilityEdit();
+                          }
+                          return;
+                        }
+                        setExpandedAvailabilityId(emp.id);
+                        if (availabilityEditingId && availabilityEditingId !== emp.id) {
+                          handleCancelAvailabilityEdit();
+                        }
+                      }}
                     >
                       {isExpanded ? "Hide Availability (" + availCount + " days)" : "View Availability (" + availCount + " days)"}
                     </button>
@@ -305,6 +397,88 @@ function Employees({ user }) {
                             );
                           })}
                         </ul>
+                      )}
+                      {isManager && (
+                        <div className="availability-editor-actions">
+                          <button
+                            type="button"
+                            className="availability-link"
+                            onClick={function () {
+                              if (availabilityEditingId === emp.id) {
+                                handleCancelAvailabilityEdit();
+                                return;
+                              }
+                              handleEditAvailabilityClick(emp);
+                            }}
+                          >
+                            {availabilityEditingId === emp.id ? "Cancel availability edit" : "Set Availability"}
+                          </button>
+                        </div>
+                      )}
+                      {isManager && availabilityEditingId === emp.id && (
+                        <div className="availability-editor">
+                          <p className="form-message" style={{ marginBottom: 10 }}>
+                            Choose which days and hours {emp.name || emp.username} can work.
+                          </p>
+                          <div className="availability-day-picker">
+                            {DAYS_OF_WEEK.map(function (day) {
+                              var checked = availabilityEditDays.indexOf(day) >= 0;
+                              return (
+                                <label key={day} className="availability-day-option">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={function () { toggleEditedAvailabilityDay(day); }}
+                                  />
+                                  <span>{day}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <div className="availability-time-row">
+                            <div className="availability-time-field">
+                              <label className="field-label">From</label>
+                              <input
+                                type="time"
+                                className="field-input"
+                                value={availabilityEditTimeFrom}
+                                onChange={function (e) { setAvailabilityEditTimeFrom(e.target.value); }}
+                              />
+                            </div>
+                            <div className="availability-time-field">
+                              <label className="field-label">To</label>
+                              <input
+                                type="time"
+                                className="field-input"
+                                value={availabilityEditTimeTo}
+                                onChange={function (e) { setAvailabilityEditTimeTo(e.target.value); }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              onClick={function () { handleSaveAvailability(emp); }}
+                              disabled={availabilitySaving}
+                            >
+                              {availabilitySaving ? "Saving..." : "Save availability"}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={handleCancelAvailabilityEdit}
+                              disabled={availabilitySaving}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {availabilityEditMessage && (
+                            <p className={availabilityEditMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"} style={{ marginTop: 10 }}>
+                              {availabilityEditMessage}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
