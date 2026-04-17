@@ -8,6 +8,7 @@ import Scheduling from "./pages/Scheduling";
 import Employees from "./pages/Employees";
 import Requests from "./pages/Requests";
 import Analytics from "./pages/Analytics";
+import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import { apiFetch, clearSession, loadStoredSession, storeSession } from "./lib/api";
@@ -18,6 +19,15 @@ function App() {
   const sessionToken = session ? session.token : "";
 
   function handleAuthenticated(nextSession) {
+    storeSession(nextSession);
+    setSession(nextSession);
+  }
+
+  function handleUserUpdated(nextUser) {
+    const nextSession = {
+      token: sessionToken,
+      user: nextUser
+    };
     storeSession(nextSession);
     setSession(nextSession);
   }
@@ -103,6 +113,7 @@ function App() {
 
               <Route path="/employees" element={<Employees user={user} />} />
               <Route path="/requests" element={<Requests user={user} />} />
+              <Route path="/profile" element={<Profile user={user} onUserUpdated={handleUserUpdated} />} />
 
               {managerView && <Route path="/analytics" element={<Analytics />} />}
 

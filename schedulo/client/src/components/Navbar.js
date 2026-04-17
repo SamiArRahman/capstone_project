@@ -34,6 +34,7 @@ function Navbar({ user }) {
     { to: "/scheduling", label: "Scheduling", managerOnly: false },
     { to: "/employees", label: "Employees", managerOnly: false },
     { to: "/requests", label: "Requests", managerOnly: false },
+    { to: "/profile", label: "Profile", managerOnly: false },
     { to: "/analytics", label: "Analytics", managerOnly: true }
   ];
 

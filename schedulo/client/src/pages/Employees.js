@@ -212,7 +212,7 @@ function Employees({ user }) {
       username: addUsername.trim(),
       password: addPassword,
       name: nameToSend,
-      email: addEmail.trim() || addUsername.trim(),
+      email: addEmail.trim(),
       maxHoursPerWeek: Number(addMaxHours) || 40
     };
     var skillsStr = addSkills.trim();
@@ -348,7 +348,7 @@ function Employees({ user }) {
                     </div>
                   )}
                   <h3 className="employee-card-name">{emp.name || emp.username}</h3>
-                  <p className="employee-email">{emp.email || emp.username}</p>
+                  <p className="employee-email">{emp.email || "No email on file"}</p>
                   <p className="employee-role-badge">
                     <span className={"role-pill role-" + emp.role}>{getRoleDisplayName(emp.role)}</span>
                   </p>

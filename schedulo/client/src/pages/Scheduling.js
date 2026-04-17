@@ -50,6 +50,8 @@ function Scheduling({ user }) {
   const [generating, setGenerating] = useState(false);
   const [generateMessage, setGenerateMessage] = useState("");
   const [clearMessage, setClearMessage] = useState("");
+  const [finalizing, setFinalizing] = useState(false);
+  const [finalizeMessage, setFinalizeMessage] = useState("");
 
   function loadWeekShifts(weekStart) {
     if (!weekStart) return;
@@ -118,6 +120,35 @@ function Scheduling({ user }) {
       })
       .finally(function () {
         setGenerating(false);
+      });
+  }
+
+  function handleFinalizeSchedule() {
+    if (!startDate) return;
+    setFinalizeMessage("");
+    setFinalizing(true);
+    apiFetch("/schedules/finalize", {
+      method: "POST",
+      body: JSON.stringify({
+        weekStart: startDate,
+        weekEnd: endDate
+      })
+    })
+      .then(function (data) {
+        var summary = "Final schedule emailed to " + (data.sentCount || 0) + " team member(s).";
+        if (Array.isArray(data.skippedNoEmail) && data.skippedNoEmail.length > 0) {
+          summary += " Missing email: " + data.skippedNoEmail.join(", ") + ".";
+        }
+        if (Array.isArray(data.failed) && data.failed.length > 0) {
+          summary += " Failed: " + data.failed.map(function (entry) { return entry.employeeName; }).join(", ") + ".";
+        }
+        setFinalizeMessage(summary);
+      })
+      .catch(function (requestError) {
+        setFinalizeMessage(requestError.message || "Failed to finalize schedule.");
+      })
+      .finally(function () {
+        setFinalizing(false);
       });
   }
 
@@ -315,6 +346,14 @@ function Scheduling({ user }) {
             >
               {generating ? "Generating..." : "Auto scheduled"}
             </button>
+            <button
+              type="button"
+              className="primary-button schedule-finalize-button"
+              onClick={handleFinalizeSchedule}
+              disabled={finalizing}
+            >
+              {finalizing ? "Sending..." : "Finalize Schedule"}
+            </button>
             {clearMessage && (
               <span className="form-message">{clearMessage}</span>
             )}
@@ -323,7 +362,15 @@ function Scheduling({ user }) {
                 {generateMessage}
               </span>
             )}
+            {finalizeMessage && (
+              <span className={finalizeMessage.indexOf("Failed") >= 0 ? "form-message error-text" : "form-message"}>
+                {finalizeMessage}
+              </span>
+            )}
           </div>
+          <p className="form-message" style={{ marginTop: 10 }}>
+            Finalize Schedule sends the selected week&apos;s shifts to team members using the email saved in their Profile.
+          </p>
         </section>
       )}
       <section className="calendar-shell">

@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const path = require("path");
 const mongoose = require("mongoose");
 const { AuditLog, Availability, PtoRequest, Shift, SwapRequest, User, connectToDatabase } = require("./db");
+const { isEmailConfigured, sendScheduleFinalizedEmail } = require("./email");
 const { DEFAULT_SHIFT_END, DEFAULT_SHIFT_START, DAY_NAMES, REQUEST_STATUSES, VALID_AVAILABILITY_DAYS, getAllowedCorsOrigins } = require("./config");
 const { comparePassword, hashPassword, signToken, verifyToken } = require("./security");
 
@@ -40,6 +41,14 @@ function escapeRegex(value) {
 
 function normalizeUsername(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isLikelyEmailAddress(value) {
+  const clean = String(value || "").trim();
+  if (!clean) {
+    return false;
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
 }
 
 function normalizeSkills(skills) {
@@ -347,6 +356,10 @@ app.post("/api/register", asyncHandler(async (req, res) => {
     res.status(400).json({ error: "Password must be at least 8 characters" });
     return;
   }
+  if (email && !isLikelyEmailAddress(email)) {
+    res.status(400).json({ error: "Email must be a valid address" });
+    return;
+  }
   if (await User.findOne({ username })) {
     res.status(409).json({ error: "Username already taken" });
     return;
@@ -369,6 +382,38 @@ app.use("/api", authenticate);
 app.get("/api/me", function currentUserHandler(req, res) {
   res.json(serializeUser(req.user));
 });
+
+app.patch("/api/me", asyncHandler(async (req, res) => {
+  const nextName = req.body.name != null ? String(req.body.name).trim() : req.user.name;
+  const nextEmail = req.body.email != null ? String(req.body.email).trim() : req.user.email;
+  const nextPassword = req.body.password != null ? String(req.body.password) : "";
+
+  if (!nextName) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+  if (nextEmail && !isLikelyEmailAddress(nextEmail)) {
+    res.status(400).json({ error: "Email must be a valid address" });
+    return;
+  }
+  if (req.body.password != null && nextPassword && nextPassword.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  req.user.name = nextName;
+  req.user.email = nextEmail;
+  if (nextPassword) {
+    req.user.passwordHash = await hashPassword(nextPassword);
+  }
+
+  await req.user.save();
+  await logAudit(req.user, "profile_updated", "user", req.user._id, {
+    email: req.user.email,
+    changedPassword: Boolean(nextPassword)
+  });
+  res.json(serializeUser(req.user));
+}));
 
 async function ensureEmployeeIsSchedulable(user, date, startTime, endTime) {
   const availability = await getAvailabilityForUser(user._id);
@@ -431,6 +476,10 @@ app.post("/api/employees", requireManager, asyncHandler(async (req, res) => {
     res.status(400).json({ error: "Password must be at least 8 characters" });
     return;
   }
+  if (email && !isLikelyEmailAddress(email)) {
+    res.status(400).json({ error: "Email must be a valid address" });
+    return;
+  }
   if (await User.findOne({ username })) {
     res.status(409).json({ error: "Username already taken" });
     return;
@@ -458,7 +507,12 @@ app.patch("/api/employees/:id", requireManager, asyncHandler(async (req, res) =>
     employee.name = String(req.body.name).trim();
   }
   if (req.body.email != null) {
-    employee.email = String(req.body.email).trim();
+    const email = String(req.body.email).trim();
+    if (email && !isLikelyEmailAddress(email)) {
+      res.status(400).json({ error: "Email must be a valid address" });
+      return;
+    }
+    employee.email = email;
   }
   if (req.body.maxHoursPerWeek != null) {
     const maxHoursPerWeek = Number(req.body.maxHoursPerWeek);
@@ -694,6 +748,92 @@ app.post("/api/schedules/generate", requireManager, asyncHandler(async (req, res
   }
   await logAudit(req.user, "schedule_generated", "shift", weekStart, { weekStart, weekEnd, cleanFirst, created: created.length });
   res.status(201).json({ created: created.length, shifts: created });
+}));
+
+app.post("/api/schedules/finalize", requireManager, asyncHandler(async (req, res) => {
+  const weekStart = String(req.body.weekStart || "").trim();
+  if (!isIsoDate(weekStart)) {
+    res.status(400).json({ error: "weekStart (YYYY-MM-DD) is required" });
+    return;
+  }
+  if (!isEmailConfigured()) {
+    res.status(503).json({ error: "Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and EMAIL_FROM on the backend." });
+    return;
+  }
+
+  const weekEnd = clampWeekEndDate(weekStart, req.body.weekEnd);
+  const shifts = await Shift.find({
+    date: { $gte: weekStart, $lte: weekEnd }
+  }).sort({ date: 1, startTime: 1 }).populate("employee", "name username email isActive");
+
+  if (shifts.length === 0) {
+    res.status(400).json({ error: "No scheduled shifts were found for this week." });
+    return;
+  }
+
+  const scheduleByEmployee = new Map();
+  shifts.forEach((shift) => {
+    const employee = shift.employee && shift.employee._id ? shift.employee : null;
+    if (!employee || employee.isActive === false) {
+      return;
+    }
+    const key = String(employee._id);
+    if (!scheduleByEmployee.has(key)) {
+      scheduleByEmployee.set(key, {
+        userId: key,
+        employeeName: employee.name || employee.username,
+        email: employee.email || "",
+        shifts: []
+      });
+    }
+    scheduleByEmployee.get(key).shifts.push(serializeShift(shift));
+  });
+
+  const sent = [];
+  const skippedNoEmail = [];
+  const failed = [];
+  const recipients = Array.from(scheduleByEmployee.values());
+
+  for (let index = 0; index < recipients.length; index += 1) {
+    const recipient = recipients[index];
+    if (!isLikelyEmailAddress(recipient.email)) {
+      skippedNoEmail.push(recipient.employeeName);
+      continue;
+    }
+    try {
+      await sendScheduleFinalizedEmail({
+        to: recipient.email,
+        employeeName: recipient.employeeName,
+        weekStart,
+        weekEnd,
+        shifts: recipient.shifts
+      });
+      sent.push(recipient.employeeName);
+    } catch (error) {
+      failed.push({
+        employeeName: recipient.employeeName,
+        error: error && error.message ? error.message : "Failed to send email"
+      });
+    }
+  }
+
+  await logAudit(req.user, "schedule_finalized", "shift", weekStart, {
+    weekStart,
+    weekEnd,
+    sent: sent.length,
+    skippedNoEmail: skippedNoEmail.length,
+    failed: failed.length
+  });
+
+  res.json({
+    weekStart,
+    weekEnd,
+    totalRecipients: recipients.length,
+    sentCount: sent.length,
+    sent,
+    skippedNoEmail,
+    failed
+  });
 }));
 
 app.get("/api/requests/pto", asyncHandler(async (req, res) => {
